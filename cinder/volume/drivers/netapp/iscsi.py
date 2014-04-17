@@ -36,6 +36,8 @@ from cinder.volume import driver
 from cinder.volume.drivers.netapp.api import NaApiError
 from cinder.volume.drivers.netapp.api import NaElement
 from cinder.volume.drivers.netapp.api import NaServer
+from cinder.volume.drivers.netapp.client import cmode
+from cinder.volume.drivers.netapp.client import seven_mode
 from cinder.volume.drivers.netapp.options import netapp_7mode_opts
 from cinder.volume.drivers.netapp.options import netapp_basicauth_opts
 from cinder.volume.drivers.netapp.options import netapp_cluster_opts
@@ -326,14 +328,6 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
                 "%(initiator_name)s")
         msg_fmt = {'name': name, 'initiator_name': initiator_name}
         LOG.debug(msg % msg_fmt)
-
-    def _get_ontapi_version(self):
-        """Gets the supported ontapi version."""
-        ontapi_version = NaElement('system-get-ontapi-version')
-        res = self.client.invoke_successfully(ontapi_version, False)
-        major = res.get_child_content('major-version')
-        minor = res.get_child_content('minor-version')
-        return (major, minor)
 
     def _create_lun_on_eligible_vol(self, name, size, metadata,
                                     extra_specs=None):
@@ -751,6 +745,7 @@ class NetAppDirectCmodeISCSIDriver(NetAppDirectISCSIDriver):
 
     def _do_custom_setup(self):
         """Does custom setup for ontap cluster."""
+        self.nclient = cmode.Client(self.client)
         self.vserver = self.configuration.netapp_vserver
         self.vserver = self.vserver if self.vserver else self.DEFAULT_VS
         # We set vserver in client permanently.
@@ -758,7 +753,7 @@ class NetAppDirectCmodeISCSIDriver(NetAppDirectISCSIDriver):
         self.client.set_vserver(self.vserver)
         # Default values to run first api
         self.client.set_api_version(1, 15)
-        (major, minor) = self._get_ontapi_version()
+        (major, minor) = self.nclient.get_ontapi_version()
         self.client.set_api_version(major, minor)
         self.ssc_vols = None
         self.stale_vols = set()
@@ -1148,12 +1143,13 @@ class NetAppDirect7modeISCSIDriver(NetAppDirectISCSIDriver):
 
     def _do_custom_setup(self):
         """Does custom setup depending on the type of filer."""
+        self.nclient = seven_mode.Client(self.client)
         self.vfiler = self.configuration.netapp_vfiler
         self.volume_list = self.configuration.netapp_volume_list
         if self.volume_list:
             self.volume_list = self.volume_list.split(',')
             self.volume_list = [el.strip() for el in self.volume_list]
-        (major, minor) = self._get_ontapi_version()
+        (major, minor) = self.nclient.get_ontapi_version()
         self.client.set_api_version(major, minor)
         if self.vfiler:
             self.client.set_vfiler(self.vfiler)
