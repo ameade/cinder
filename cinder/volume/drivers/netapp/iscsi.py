@@ -178,19 +178,8 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
             msg_fmt = {'name': name}
             LOG.warn(msg % msg_fmt)
             return
-        self._destroy_lun(metadata['Path'])
+        self.nclient.destroy_lun(metadata['Path'])
         self.lun_table.pop(name)
-
-    def _destroy_lun(self, path, force=True):
-        """Destroys the lun at the path."""
-        lun_destroy = NaElement.create_node_with_children(
-            'lun-destroy',
-            **{'path': path})
-        if force:
-            lun_destroy.add_new_child('force', 'true')
-        self.client.invoke_successfully(lun_destroy, True)
-        seg = path.split("/")
-        LOG.debug(_("Destroyed LUN %s") % seg[-1])
 
     def ensure_export(self, context, volume):
         """Driver entry point to get the export info for an existing volume."""
@@ -333,18 +322,6 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
                                     extra_specs=None):
         """Creates an actual lun on filer."""
         raise NotImplementedError()
-
-    def create_lun(self, volume, lun, size, metadata, qos_policy_group=None):
-        """Issues api request for creating lun on volume."""
-        path = '/vol/%s/%s' % (volume, lun)
-        lun_create = NaElement.create_node_with_children(
-            'lun-create-by-size',
-            **{'path': path, 'size': size,
-                'ostype': metadata['OsType'],
-                'space-reservation-enabled': metadata['SpaceReserved']})
-        if qos_policy_group:
-            lun_create.add_new_child('qos-policy-group', qos_policy_group)
-        self.client.invoke_successfully(lun_create, True)
 
     def _get_iscsi_service_details(self):
         """Returns iscsi iqn."""
@@ -678,14 +655,14 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
                         ' as it contains no blocks.')
                 raise exception.VolumeBackendAPIException(data=msg % name)
             new_lun = 'new-%s' % (name)
-            self.create_lun(vol_name, new_lun, new_size_bytes, metadata)
+            self.nclient.create_lun(vol_name, new_lun, new_size_bytes, metadata)
             try:
                 self._clone_lun(name, new_lun, block_count=block_count)
                 self._post_sub_clone_resize(path)
             except Exception:
                 with excutils.save_and_reraise_exception():
                     new_path = '/vol/%s/%s' % (vol_name, new_lun)
-                    self._destroy_lun(new_path)
+                    self.nclient.destroy_lun(new_path)
 
     def _post_sub_clone_resize(self, path):
         """Try post sub clone resize in a transactional manner."""
@@ -699,7 +676,7 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
         try:
             st_tm_mv = self._move_lun(path, tmp_path)
             st_nw_mv = self._move_lun(new_path, path)
-            st_del_old = self._destroy_lun(tmp_path)
+            st_del_old = self.nclient.destroy_lun(tmp_path)
         except Exception as e:
             if st_tm_mv is None:
                 msg = _("Failure staging lun %s to tmp.")
@@ -778,8 +755,8 @@ class NetAppDirectCmodeISCSIDriver(NetAppDirectISCSIDriver):
             raise exception.VolumeBackendAPIException(data=msg % name)
         for volume in volumes:
             try:
-                self.create_lun(volume.id['name'], name, size, metadata,
-                                qos_policy_group=qos_policy_group)
+                self.nclient.create_lun(volume.id['name'], name, size, metadata,
+                                        qos_policy_group=qos_policy_group)
                 metadata['Path'] = '/vol/%s/%s' % (volume.id['name'], name)
                 metadata['Volume'] = volume.id['name']
                 metadata['Qtree'] = None
@@ -1185,7 +1162,7 @@ class NetAppDirect7modeISCSIDriver(NetAppDirectISCSIDriver):
         if not volume:
             msg = _('Failed to get vol with required size for volume: %s')
             raise exception.VolumeBackendAPIException(data=msg % name)
-        self.create_lun(volume['name'], name, size, metadata)
+        self.nclient.create_lun(volume['name'], name, size, metadata)
         metadata['Path'] = '/vol/%s/%s' % (volume['name'], name)
         metadata['Volume'] = volume['name']
         metadata['Qtree'] = None
