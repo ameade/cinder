@@ -27,7 +27,7 @@ class NetAppCmodeClientTestCase(test.TestCase):
     def setUp(self):
         super(NetAppCmodeClientTestCase, self).setUp()
         self.connection = mock.MagicMock()
-        self.client = cmode.Client(self.connection)
+        self.client = cmode.Client(self.connection, 'fake_vserver')
         self.fake_volume = str(uuid.uuid4())
         self.fake_lun = str(uuid.uuid4())
         self.fake_size = '1024'
@@ -75,3 +75,73 @@ class NetAppCmodeClientTestCase(test.TestCase):
         target_list = self.client.get_target_details()
 
         self.assertEqual([expected_target], target_list)
+
+    def test_get_iscsi_service_details_with_no_iscsi_service(self):
+        version_response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                            <num-records>0</num-records>
+                          </results>"""))
+        self.connection.invoke_successfully.return_value = version_response
+
+        iqn = self.client.get_iscsi_service_details()
+
+        self.assertEqual(None, iqn)
+
+    def test_get_iscsi_service_details(self):
+        expected_iqn = 'iqn.1998-01.org.openstack.iscsi:name1'
+        version_response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                            <num-records>1</num-records>
+                            <attributes-list>
+                              <iscsi-service-info>
+                                <node-name>%s</node-name>
+                              </iscsi-service-info>
+                            </attributes-list>
+                          </results>""" % expected_iqn))
+        self.connection.invoke_successfully.return_value = version_response
+
+        iqn = self.client.get_iscsi_service_details()
+
+        self.assertEqual(expected_iqn, iqn)
+
+    def test_get_lun_list(self):
+        version_response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                            <num-records>2</num-records>
+                            <attributes-list>
+                              <lun-info>
+                              </lun-info>
+                              <lun-info>
+                              </lun-info>
+                            </attributes-list>
+                          </results>"""))
+        self.connection.invoke_successfully.return_value = version_response
+
+        luns = self.client.get_lun_list()
+
+        self.assertEqual(2, len(luns))
+
+    def test_get_lun_list_with_multiple_pages(self):
+        version_response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                            <num-records>2</num-records>
+                            <attributes-list>
+                              <lun-info> </lun-info>
+                              <lun-info> </lun-info>
+                            </attributes-list>
+                            <next-tag>fake-next</next-tag>
+                          </results>"""))
+        version_response_2 = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                            <num-records>2</num-records>
+                            <attributes-list>
+                              <lun-info> </lun-info>
+                              <lun-info> </lun-info>
+                            </attributes-list>
+                          </results>"""))
+        self.connection.invoke_successfully.side_effect = [version_response,
+                                                           version_response_2]
+
+        luns = self.client.get_lun_list()
+
+        self.assertEqual(4, len(luns))

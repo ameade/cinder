@@ -173,3 +173,11 @@ class Client(object):
     def get_target_details(self):
         """Gets the target portal details."""
         raise NotImplementedError()
+
+    def get_iscsi_service_details(self):
+        """Returns iscsi iqn."""
+        raise NotImplementedError()
+
+    def get_lun_list(self):
+        """Gets the list of luns on filer."""
+        raise NotImplementedError()

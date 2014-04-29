@@ -148,7 +148,8 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
         """
 
         self.lun_table = {}
-        self._get_lun_list()
+        lun_list = self.nclient.get_lun_list()
+        self._extract_and_populate_luns(lun_list)
         LOG.debug(_("Success getting LUN list from server"))
 
     def create_volume(self, volume):
@@ -218,7 +219,7 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
         msg = _("Mapped LUN %(name)s to the initiator %(initiator_name)s")
         msg_fmt = {'name': name, 'initiator_name': initiator_name}
         LOG.debug(msg % msg_fmt)
-        iqn = self._get_iscsi_service_details()
+        iqn = self.nclient.get_iscsi_service_details()
         target_details_list = self.nclient.get_target_details()
         msg = _("Successfully fetched target details for LUN %(name)s and "
                 "initiator %(initiator_name)s")
@@ -323,16 +324,8 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
         """Creates an actual lun on filer."""
         raise NotImplementedError()
 
-    def _get_iscsi_service_details(self):
-        """Returns iscsi iqn."""
-        raise NotImplementedError()
-
     def _create_lun_handle(self, metadata):
         """Returns lun handle based on filer type."""
-        raise NotImplementedError()
-
-    def _get_lun_list(self):
-        """Gets the list of luns on filer."""
         raise NotImplementedError()
 
     def _extract_and_populate_luns(self, api_luns):
@@ -435,7 +428,8 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
         """
         lun = self.lun_table.get(name)
         if lun is None:
-            self._get_lun_list()
+            lun_list = self.nclient.get_lun_list()
+            self._extract_and_populate_luns(lun_list)
             lun = self.lun_table.get(name)
             if lun is None:
                 raise exception.VolumeNotFound(volume_id=name)
@@ -620,9 +614,9 @@ class NetAppDirectCmodeISCSIDriver(NetAppDirectISCSIDriver):
 
     def _do_custom_setup(self):
         """Does custom setup for ontap cluster."""
-        self.nclient = cmode.Client(self.client)
         self.vserver = self.configuration.netapp_vserver
         self.vserver = self.vserver if self.vserver else self.DEFAULT_VS
+        self.nclient = cmode.Client(self.client, self.vserver)
         # We set vserver in client permanently.
         # To use tunneling enable_tunneling while invoking api
         self.client.set_vserver(self.vserver)
@@ -683,47 +677,9 @@ class NetAppDirectCmodeISCSIDriver(NetAppDirectISCSIDriver):
                     result.append(vol)
         return result
 
-    def _get_iscsi_service_details(self):
-        """Returns iscsi iqn."""
-        iscsi_service_iter = NaElement('iscsi-service-get-iter')
-        result = self.client.invoke_successfully(iscsi_service_iter, True)
-        if result.get_child_content('num-records') and\
-                int(result.get_child_content('num-records')) >= 1:
-            attr_list = result.get_child_by_name('attributes-list')
-            iscsi_service = attr_list.get_child_by_name('iscsi-service-info')
-            return iscsi_service.get_child_content('node-name')
-        LOG.debug(_('No iscsi service found for vserver %s') % (self.vserver))
-        return None
-
     def _create_lun_handle(self, metadata):
         """Returns lun handle based on filer type."""
         return '%s:%s' % (self.vserver, metadata['Path'])
-
-    def _get_lun_list(self):
-        """Gets the list of luns on filer.
-
-        Gets the luns from cluster with vserver.
-        """
-
-        tag = None
-        while True:
-            api = NaElement('lun-get-iter')
-            api.add_new_child('max-records', '100')
-            if tag:
-                api.add_new_child('tag', tag, True)
-            lun_info = NaElement('lun-info')
-            lun_info.add_new_child('vserver', self.vserver)
-            query = NaElement('query')
-            query.add_child_elem(lun_info)
-            api.add_child_elem(query)
-            result = self.client.invoke_successfully(api)
-            if result.get_child_by_name('num-records') and\
-                    int(result.get_child_content('num-records')) >= 1:
-                attr_list = result.get_child_by_name('attributes-list')
-                self._extract_and_populate_luns(attr_list.get_children())
-            tag = result.get_child_content('next-tag')
-            if tag is None:
-                break
 
     def _find_mapped_lun_igroup(self, path, initiator, os=None):
         """Find the igroup for mapped lun with initiator."""
@@ -1002,12 +958,12 @@ class NetAppDirect7modeISCSIDriver(NetAppDirectISCSIDriver):
 
     def _do_custom_setup(self):
         """Does custom setup depending on the type of filer."""
-        self.nclient = seven_mode.Client(self.client)
         self.vfiler = self.configuration.netapp_vfiler
         self.volume_list = self.configuration.netapp_volume_list
         if self.volume_list:
             self.volume_list = self.volume_list.split(',')
             self.volume_list = [el.strip() for el in self.volume_list]
+        self.nclient = seven_mode.Client(self.client, self.volume_list)
         (major, minor) = self.nclient.get_ontapi_version()
         self.client.set_api_version(major, minor)
         if self.vfiler:
@@ -1109,12 +1065,6 @@ class NetAppDirect7modeISCSIDriver(NetAppDirectISCSIDriver):
                                 igroups.append(d)
         return igroups
 
-    def _get_iscsi_service_details(self):
-        """Returns iscsi iqn."""
-        iscsi_service_iter = NaElement('iscsi-node-get-name')
-        result = self.client.invoke_successfully(iscsi_service_iter, True)
-        return result.get_child_content('node-name')
-
     def _create_lun_handle(self, metadata):
         """Returns lun handle based on filer type."""
         if self.vfiler:
@@ -1123,32 +1073,6 @@ class NetAppDirect7modeISCSIDriver(NetAppDirectISCSIDriver):
         else:
             owner = self.configuration.netapp_server_hostname
         return '%s:%s' % (owner, metadata['Path'])
-
-    def _get_lun_list(self):
-        """Gets the list of luns on filer."""
-        lun_list = []
-        if self.volume_list:
-            for vol in self.volume_list:
-                try:
-                    luns = self._get_vol_luns(vol)
-                    if luns:
-                        lun_list.extend(luns)
-                except NaApiError:
-                    LOG.warn(_("Error finding luns for volume %s."
-                               " Verify volume exists.") % (vol))
-        else:
-            luns = self._get_vol_luns(None)
-            lun_list.extend(luns)
-        self._extract_and_populate_luns(lun_list)
-
-    def _get_vol_luns(self, vol_name):
-        """Gets the luns for a volume."""
-        api = NaElement('lun-list-info')
-        if vol_name:
-            api.add_new_child('volume-name', vol_name)
-        result = self.client.invoke_successfully(api, True)
-        luns = result.get_child_by_name('luns')
-        return luns.get_children()
 
     def _find_mapped_lun_igroup(self, path, initiator, os=None):
         """Find the igroup for mapped lun with initiator."""

@@ -24,6 +24,10 @@ LOG = logging.getLogger(__name__)
 
 class Client(base.Client):
 
+    def __init__(self, connection, volume_list):
+        super(Client, self).__init__(connection)
+        self.volume_list = volume_list
+
     def get_target_details(self):
         """Gets the target portal details."""
         iscsi_if_iter = netapp_api.NaElement('iscsi-portal-list-info')
@@ -40,3 +44,35 @@ class Client(base.Client):
                 d['tpgroup-tag'] = iscsi_if.get_child_content('tpgroup-tag')
                 tgt_list.append(d)
         return tgt_list
+
+    def get_iscsi_service_details(self):
+        """Returns iscsi iqn."""
+        iscsi_service_iter = netapp_api.NaElement('iscsi-node-get-name')
+        result = self.connection.invoke_successfully(iscsi_service_iter, True)
+        return result.get_child_content('node-name')
+
+    def get_lun_list(self):
+        """Gets the list of luns on filer."""
+        lun_list = []
+        if self.volume_list:
+            for vol in self.volume_list:
+                try:
+                    luns = self._get_vol_luns(vol)
+                    if luns:
+                        lun_list.extend(luns)
+                except netapp_api.NaApiError:
+                    LOG.warn(_("Error finding luns for volume %s."
+                               " Verify volume exists.") % (vol))
+        else:
+            luns = self._get_vol_luns(None)
+            lun_list.extend(luns)
+        return lun_list
+
+    def _get_vol_luns(self, vol_name):
+        """Gets the luns for a volume."""
+        api = netapp_api.NaElement('lun-list-info')
+        if vol_name:
+            api.add_new_child('volume-name', vol_name)
+        result = self.connection.invoke_successfully(api, True)
+        luns = result.get_child_by_name('luns')
+        return luns.get_children()

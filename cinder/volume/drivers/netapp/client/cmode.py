@@ -24,6 +24,10 @@ LOG = logging.getLogger(__name__)
 
 class Client(base.Client):
 
+    def __init__(self, connection, vserver):
+        super(Client, self).__init__(connection)
+        self.vserver = vserver
+
     def get_target_details(self):
         """Gets the target portal details."""
         iscsi_if_iter = netapp_api.NaElement('iscsi-interface-get-iter')
@@ -42,3 +46,43 @@ class Client(base.Client):
                     'is-interface-enabled')
                 tgt_list.append(d)
         return tgt_list
+
+    def get_iscsi_service_details(self):
+        """Returns iscsi iqn."""
+        iscsi_service_iter = netapp_api.NaElement('iscsi-service-get-iter')
+        result = self.connection.invoke_successfully(iscsi_service_iter, True)
+        if result.get_child_content('num-records') and\
+                int(result.get_child_content('num-records')) >= 1:
+            attr_list = result.get_child_by_name('attributes-list')
+            iscsi_service = attr_list.get_child_by_name('iscsi-service-info')
+            return iscsi_service.get_child_content('node-name')
+        LOG.debug(_('No iscsi service found for vserver %s') % (self.vserver))
+        return None
+
+    def get_lun_list(self):
+        """Gets the list of luns on filer.
+
+        Gets the luns from cluster with vserver.
+        """
+
+        luns = []
+        tag = None
+        while True:
+            api = netapp_api.NaElement('lun-get-iter')
+            api.add_new_child('max-records', '100')
+            if tag:
+                api.add_new_child('tag', tag, True)
+            lun_info = netapp_api.NaElement('lun-info')
+            lun_info.add_new_child('vserver', self.vserver)
+            query = netapp_api.NaElement('query')
+            query.add_child_elem(lun_info)
+            api.add_child_elem(query)
+            result = self.connection.invoke_successfully(api)
+            if result.get_child_by_name('num-records') and\
+                    int(result.get_child_content('num-records')) >= 1:
+                attr_list = result.get_child_by_name('attributes-list')
+                luns.extend(attr_list.get_children())
+            tag = result.get_child_content('next-tag')
+            if tag is None:
+                break
+        return luns
