@@ -409,8 +409,8 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
                         break
         if not igroup_name:
             igroup_name = self.IGROUP_PREFIX + str(uuid.uuid4())
-            self._create_igroup(igroup_name, initiator_type, os)
-            self._add_igroup_initiator(igroup_name, initiator)
+            self.nclient.create_igroup(igroup_name, initiator_type, os)
+            self.nclient.add_igroup_initiator(igroup_name, initiator)
         return igroup_name
 
     def _get_igroup_by_initiator(self, initiator):
@@ -424,23 +424,6 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
             return True
         else:
             return False
-
-    def _create_igroup(self, igroup, igroup_type='iscsi', os_type='default'):
-        """Creates igroup with specified args."""
-        igroup_create = NaElement.create_node_with_children(
-            'igroup-create',
-            **{'initiator-group-name': igroup,
-               'initiator-group-type': igroup_type,
-               'os-type': os_type})
-        self.client.invoke_successfully(igroup_create, True)
-
-    def _add_igroup_initiator(self, igroup, initiator):
-        """Adds initiators to the specified igroup."""
-        igroup_add = NaElement.create_node_with_children(
-            'igroup-add',
-            **{'initiator-group-name': igroup,
-               'initiator': initiator})
-        self.client.invoke_successfully(igroup_add, True)
 
     def _add_lun_to_table(self, lun):
         """Adds LUN to cache table."""
@@ -526,11 +509,11 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
         # Reused by clone scenarios.
         # Hence comparing the stored size.
         if curr_size_bytes != new_size_bytes:
-            lun_geometry = self._get_lun_geometry(path)
+            lun_geometry = self.nclient.get_lun_geometry(path)
             if (lun_geometry and lun_geometry.get("max_resize")
                     and int(lun_geometry.get("max_resize")) >=
                     int(new_size_bytes)):
-                self._do_direct_resize(path, new_size_bytes)
+                self.nclient.do_direct_resize(path, new_size_bytes)
             else:
                 self._do_sub_clone_resize(path, new_size_bytes)
             self.lun_table[name].size = new_size_bytes
@@ -538,71 +521,15 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
             LOG.info(_("No need to extend volume %s"
                        " as it is already the requested new size."), name)
 
-    def _do_direct_resize(self, path, new_size_bytes, force=True):
-        """Uses the resize api to resize the lun."""
-        seg = path.split("/")
-        LOG.info(_("Resizing lun %s directly to new size."), seg[-1])
-        lun_resize = NaElement("lun-resize")
-        lun_resize.add_new_child('path', path)
-        lun_resize.add_new_child('size', new_size_bytes)
-        if force:
-            lun_resize.add_new_child('force', 'true')
-        self.client.invoke_successfully(lun_resize, True)
-
-    def _get_lun_geometry(self, path):
-        """Gets the lun geometry."""
-        geometry = {}
-        lun_geo = NaElement("lun-get-geometry")
-        lun_geo.add_new_child('path', path)
-        try:
-            result = self.client.invoke_successfully(lun_geo, True)
-            geometry['size'] = result.get_child_content("size")
-            geometry['bytes_per_sector'] =\
-                result.get_child_content("bytes-per-sector")
-            geometry['sectors_per_track'] =\
-                result.get_child_content("sectors-per-track")
-            geometry['tracks_per_cylinder'] =\
-                result.get_child_content("tracks-per-cylinder")
-            geometry['cylinders'] =\
-                result.get_child_content("cylinders")
-            geometry['max_resize'] =\
-                result.get_child_content("max-resize-size")
-        except Exception as e:
-            LOG.error(_("Lun %(path)s geometry failed. Message - %(msg)s")
-                      % {'path': path, 'msg': e.message})
-        return geometry
-
-    def _get_volume_options(self, volume_name):
-        """Get the value for the volume option."""
-        opts = []
-        vol_option_list = NaElement("volume-options-list-info")
-        vol_option_list.add_new_child('volume', volume_name)
-        result = self.client.invoke_successfully(vol_option_list, True)
-        options = result.get_child_by_name("options")
-        if options:
-            opts = options.get_children()
-        return opts
-
     def _get_vol_option(self, volume_name, option_name):
         """Get the value for the volume option."""
         value = None
-        options = self._get_volume_options(volume_name)
+        options = self.nclient.get_volume_options(volume_name)
         for opt in options:
             if opt.get_child_content('name') == option_name:
                 value = opt.get_child_content('value')
                 break
         return value
-
-    def _move_lun(self, path, new_path):
-        """Moves the lun at path to new path."""
-        seg = path.split("/")
-        new_seg = new_path.split("/")
-        LOG.debug(_("Moving lun %(name)s to %(new_name)s.")
-                  % {'name': seg[-1], 'new_name': new_seg[-1]})
-        lun_move = NaElement("lun-move")
-        lun_move.add_new_child("path", path)
-        lun_move.add_new_child("new-path", new_path)
-        self.client.invoke_successfully(lun_move, True)
 
     def _do_sub_clone_resize(self, path, new_size_bytes):
         """Does sub lun clone after verification.
@@ -649,8 +576,8 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
         tmp_path = "/vol/%s/%s" % (seg[2], tmp_lun)
         new_path = "/vol/%s/%s" % (seg[2], new_lun)
         try:
-            st_tm_mv = self._move_lun(path, tmp_path)
-            st_nw_mv = self._move_lun(new_path, path)
+            st_tm_mv = self.nclient.move_lun(path, tmp_path)
+            st_nw_mv = self.nclient.move_lun(new_path, path)
             st_del_old = self.nclient.destroy_lun(tmp_path)
         except Exception as e:
             if st_tm_mv is None:
@@ -658,7 +585,7 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
                 raise exception.VolumeBackendAPIException(data=msg % (seg[-1]))
             else:
                 if st_nw_mv is None:
-                    self._move_lun(tmp_path, path)
+                    self.nclient.move_lun(tmp_path, path)
                     msg = _("Failure moving new cloned lun to %s.")
                     raise exception.VolumeBackendAPIException(
                         data=msg % (seg[-1]))

@@ -95,3 +95,77 @@ class Client(object):
                 pass
             else:
                 raise exc_info[0], exc_info[1], exc_info[2]
+
+    def create_igroup(self, igroup, igroup_type='iscsi', os_type='default'):
+        """Creates igroup with specified args."""
+        igroup_create = netapp_api.NaElement.create_node_with_children(
+            'igroup-create',
+            **{'initiator-group-name': igroup,
+               'initiator-group-type': igroup_type,
+               'os-type': os_type})
+        self.connection.invoke_successfully(igroup_create, True)
+
+    def add_igroup_initiator(self, igroup, initiator):
+        """Adds initiators to the specified igroup."""
+        igroup_add = netapp_api.NaElement.create_node_with_children(
+            'igroup-add',
+            **{'initiator-group-name': igroup,
+               'initiator': initiator})
+        self.connection.invoke_successfully(igroup_add, True)
+
+    def do_direct_resize(self, path, new_size_bytes, force=True):
+        """Resize the lun."""
+        seg = path.split("/")
+        LOG.info(_("Resizing lun %s directly to new size."), seg[-1])
+        lun_resize = netapp_api.NaElement.create_node_with_children(
+            'lun-resize',
+            **{'path': path,
+               'size': new_size_bytes})
+        if force:
+            lun_resize.add_new_child('force', 'true')
+        self.connection.invoke_successfully(lun_resize, True)
+
+    def get_lun_geometry(self, path):
+        """Gets the lun geometry."""
+        geometry = {}
+        lun_geo = netapp_api.NaElement("lun-get-geometry")
+        lun_geo.add_new_child('path', path)
+        try:
+            result = self.connection.invoke_successfully(lun_geo, True)
+            geometry['size'] = result.get_child_content("size")
+            geometry['bytes_per_sector'] =\
+                result.get_child_content("bytes-per-sector")
+            geometry['sectors_per_track'] =\
+                result.get_child_content("sectors-per-track")
+            geometry['tracks_per_cylinder'] =\
+                result.get_child_content("tracks-per-cylinder")
+            geometry['cylinders'] =\
+                result.get_child_content("cylinders")
+            geometry['max_resize'] =\
+                result.get_child_content("max-resize-size")
+        except Exception as e:
+            LOG.error(_("Lun %(path)s geometry failed. Message - %(msg)s")
+                      % {'path': path, 'msg': e.message})
+        return geometry
+
+    def get_volume_options(self, volume_name):
+        """Get the value for the volume option."""
+        opts = []
+        vol_option_list = netapp_api.NaElement("volume-options-list-info")
+        vol_option_list.add_new_child('volume', volume_name)
+        result = self.connection.invoke_successfully(vol_option_list, True)
+        options = result.get_child_by_name("options")
+        if options:
+            opts = options.get_children()
+        return opts
+
+    def move_lun(self, path, new_path):
+        """Moves the lun at path to new path."""
+        seg = path.split("/")
+        new_seg = new_path.split("/")
+        LOG.debug(_("Moving lun %(name)s to %(new_name)s.")
+                  % {'name': seg[-1], 'new_name': new_seg[-1]})
+        lun_move = netapp_api.NaElement("lun-move")
+        lun_move.add_new_child("path", path)
+        lun_move.add_new_child("new-path", new_path)
+        self.connection.invoke_successfully(lun_move, True)
