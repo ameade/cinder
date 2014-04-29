@@ -169,3 +169,7 @@ class Client(object):
         lun_move.add_new_child("path", path)
         lun_move.add_new_child("new-path", new_path)
         self.connection.invoke_successfully(lun_move, True)
+
+    def get_target_details(self):
+        """Gets the target portal details."""
+        raise NotImplementedError()

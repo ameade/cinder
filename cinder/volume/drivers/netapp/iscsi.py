@@ -219,7 +219,7 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
         msg_fmt = {'name': name, 'initiator_name': initiator_name}
         LOG.debug(msg % msg_fmt)
         iqn = self._get_iscsi_service_details()
-        target_details_list = self._get_target_details()
+        target_details_list = self.nclient.get_target_details()
         msg = _("Successfully fetched target details for LUN %(name)s and "
                 "initiator %(initiator_name)s")
         msg_fmt = {'name': name, 'initiator_name': initiator_name}
@@ -325,10 +325,6 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
 
     def _get_iscsi_service_details(self):
         """Returns iscsi iqn."""
-        raise NotImplementedError()
-
-    def _get_target_details(self):
-        """Gets the target portal details."""
         raise NotImplementedError()
 
     def _create_lun_handle(self, metadata):
@@ -686,25 +682,6 @@ class NetAppDirectCmodeISCSIDriver(NetAppDirectISCSIDriver):
                 if int(vol.space['size_avl_bytes']) >= int(size):
                     result.append(vol)
         return result
-
-    def _get_target_details(self):
-        """Gets the target portal details."""
-        iscsi_if_iter = NaElement('iscsi-interface-get-iter')
-        result = self.client.invoke_successfully(iscsi_if_iter, True)
-        tgt_list = []
-        if result.get_child_content('num-records')\
-                and int(result.get_child_content('num-records')) >= 1:
-            attr_list = result.get_child_by_name('attributes-list')
-            iscsi_if_list = attr_list.get_children()
-            for iscsi_if in iscsi_if_list:
-                d = dict()
-                d['address'] = iscsi_if.get_child_content('ip-address')
-                d['port'] = iscsi_if.get_child_content('ip-port')
-                d['tpgroup-tag'] = iscsi_if.get_child_content('tpgroup-tag')
-                d['interface-enabled'] = iscsi_if.get_child_content(
-                    'is-interface-enabled')
-                tgt_list.append(d)
-        return tgt_list
 
     def _get_iscsi_service_details(self):
         """Returns iscsi iqn."""
@@ -1131,23 +1108,6 @@ class NetAppDirect7modeISCSIDriver(NetAppDirectISCSIDriver):
                                         'initiator-group-name')
                                 igroups.append(d)
         return igroups
-
-    def _get_target_details(self):
-        """Gets the target portal details."""
-        iscsi_if_iter = NaElement('iscsi-portal-list-info')
-        result = self.client.invoke_successfully(iscsi_if_iter, True)
-        tgt_list = []
-        portal_list_entries = result.get_child_by_name(
-            'iscsi-portal-list-entries')
-        if portal_list_entries:
-            portal_list = portal_list_entries.get_children()
-            for iscsi_if in portal_list:
-                d = dict()
-                d['address'] = iscsi_if.get_child_content('ip-address')
-                d['port'] = iscsi_if.get_child_content('ip-port')
-                d['tpgroup-tag'] = iscsi_if.get_child_content('tpgroup-tag')
-                tgt_list.append(d)
-        return tgt_list
 
     def _get_iscsi_service_details(self):
         """Returns iscsi iqn."""

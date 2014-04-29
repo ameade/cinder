@@ -23,4 +23,20 @@ LOG = logging.getLogger(__name__)
 
 
 class Client(base.Client):
-    pass
+
+    def get_target_details(self):
+        """Gets the target portal details."""
+        iscsi_if_iter = netapp_api.NaElement('iscsi-portal-list-info')
+        result = self.connection.invoke_successfully(iscsi_if_iter, True)
+        tgt_list = []
+        portal_list_entries = result.get_child_by_name(
+            'iscsi-portal-list-entries')
+        if portal_list_entries:
+            portal_list = portal_list_entries.get_children()
+            for iscsi_if in portal_list:
+                d = dict()
+                d['address'] = iscsi_if.get_child_content('ip-address')
+                d['port'] = iscsi_if.get_child_content('ip-port')
+                d['tpgroup-tag'] = iscsi_if.get_child_content('tpgroup-tag')
+                tgt_list.append(d)
+        return tgt_list
