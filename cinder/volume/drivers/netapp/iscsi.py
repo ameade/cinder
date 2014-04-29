@@ -362,7 +362,7 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
                                                  initiator_type, os)
         try:
             return self.nclient.map_lun(path, igroup_name, lun_id=lun_id)
-        except NaApiError as e:
+        except NaApiError:
             exc_info = sys.exc_info()
             (igroup, lun_id) = self._find_mapped_lun_igroup(path, initiator)
             if lun_id is not None:

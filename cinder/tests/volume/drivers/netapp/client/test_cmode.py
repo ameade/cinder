@@ -65,7 +65,9 @@ class NetAppCmodeClientTestCase(test.TestCase):
                               <iscsi-interface-list-entry-info>
                                 <ip-address>%(address)s</ip-address>
                                 <ip-port>%(port)s</ip-port>
-                                <is-interface-enabled>%(interface-enabled)s</is-interface-enabled>
+                                <is-interface-enabled>
+                                  %(interface-enabled)s
+                                </is-interface-enabled>
                                 <tpgroup-tag>%(tpgroup-tag)s</tpgroup-tag>
                               </iscsi-interface-list-entry-info>
                             </attributes-list>
