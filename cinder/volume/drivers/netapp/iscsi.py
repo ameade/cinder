@@ -371,14 +371,8 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
             os = 'default'
         igroup_name = self._get_or_create_igroup(initiator,
                                                  initiator_type, os)
-        lun_map = NaElement.create_node_with_children(
-            'lun-map', **{'path': path,
-                          'initiator-group': igroup_name})
-        if lun_id:
-            lun_map.add_new_child('lun-id', lun_id)
         try:
-            result = self.client.invoke_successfully(lun_map, True)
-            return result.get_child_content('lun-id-assigned')
+            return self.nclient.map_lun(path, igroup_name, lun_id=lun_id)
         except NaApiError as e:
             code = e.code
             message = e.message
@@ -395,22 +389,7 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
     def _unmap_lun(self, path, initiator):
         """Unmaps a lun from given initiator."""
         (igroup_name, lun_id) = self._find_mapped_lun_igroup(path, initiator)
-        lun_unmap = NaElement.create_node_with_children(
-            'lun-unmap',
-            **{'path': path, 'initiator-group': igroup_name})
-        try:
-            self.client.invoke_successfully(lun_unmap, True)
-        except NaApiError as e:
-            msg = _("Error unmapping lun. Code :%(code)s,"
-                    " Message:%(message)s")
-            msg_fmt = {'code': e.code, 'message': e.message}
-            exc_info = sys.exc_info()
-            LOG.warn(msg % msg_fmt)
-            # if the lun is already unmapped
-            if e.code == '13115' or e.code == '9016':
-                pass
-            else:
-                raise exc_info[0], exc_info[1], exc_info[2]
+        self.nclient.unmap_lun(path, igroup_name)
 
     def _find_mapped_lun_igroup(self, path, initiator, os=None):
         """Find the igroup for mapped lun with initiator."""
@@ -655,7 +634,8 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
                         ' as it contains no blocks.')
                 raise exception.VolumeBackendAPIException(data=msg % name)
             new_lun = 'new-%s' % (name)
-            self.nclient.create_lun(vol_name, new_lun, new_size_bytes, metadata)
+            self.nclient.create_lun(vol_name, new_lun, new_size_bytes,
+                                    metadata)
             try:
                 self._clone_lun(name, new_lun, block_count=block_count)
                 self._post_sub_clone_resize(path)
@@ -755,7 +735,10 @@ class NetAppDirectCmodeISCSIDriver(NetAppDirectISCSIDriver):
             raise exception.VolumeBackendAPIException(data=msg % name)
         for volume in volumes:
             try:
-                self.nclient.create_lun(volume.id['name'], name, size, metadata,
+                self.nclient.create_lun(volume.id['name'],
+                                        name,
+                                        size,
+                                        metadata,
                                         qos_policy_group=qos_policy_group)
                 metadata['Path'] = '/vol/%s/%s' % (volume.id['name'], name)
                 metadata['Volume'] = volume.id['name']

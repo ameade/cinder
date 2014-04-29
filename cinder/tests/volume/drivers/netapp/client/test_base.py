@@ -128,3 +128,113 @@ class NetAppBaseClientTestCase(test.TestCase):
             mock_request.add_new_child.assert_called_once_with('force', 'true')
             self.connection.invoke_successfully.assert_called_once_with(
                 mock.ANY, True)
+
+    def test_map_lun(self):
+        path = '/vol/%s/%s' % (self.fake_volume, self.fake_lun)
+        igroup = 'igroup'
+        expected_lun_id = 'my_lun'
+        mock_response = mock.Mock()
+        self.connection.invoke_successfully.return_value = mock_response
+        mock_response.get_child_content.return_value = expected_lun_id
+
+        with mock.patch.object(netapp_api.NaElement,
+                               'create_node_with_children',
+                               ) as mock_create_node:
+            actual_lun_id = self.client.map_lun(path, igroup)
+
+            mock_create_node.assert_called_once_with(
+                'lun-map',
+                **{'path': path, 'initiator-group': igroup})
+            self.connection.invoke_successfully.assert_called_once_with(
+                mock.ANY, True)
+            self.assertEqual(expected_lun_id, actual_lun_id)
+
+    def test_map_lun_with_lun_id(self):
+        path = '/vol/%s/%s' % (self.fake_volume, self.fake_lun)
+        igroup = 'igroup'
+        expected_lun_id = 'my_lun'
+        mock_response = mock.Mock()
+        self.connection.invoke_successfully.return_value = mock_response
+        mock_response.get_child_content.return_value = expected_lun_id
+
+        with mock.patch.object(netapp_api.NaElement,
+                               'create_node_with_children',
+                               ) as mock_create_node:
+            actual_lun_id = self.client.map_lun(path, igroup,
+                                                lun_id=expected_lun_id)
+
+            mock_create_node.assert_called_once_with(
+                'lun-map',
+                **{'path': path, 'initiator-group': igroup})
+            self.connection.invoke_successfully.assert_called_once_with(
+                mock.ANY, True)
+            self.assertEqual(expected_lun_id, actual_lun_id)
+
+    def test_unmap_lun(self):
+        path = '/vol/%s/%s' % (self.fake_volume, self.fake_lun)
+        igroup = 'igroup'
+        mock_response = mock.Mock()
+        self.connection.invoke_successfully.return_value = mock_response
+
+        with mock.patch.object(netapp_api.NaElement,
+                               'create_node_with_children',
+                               ) as mock_create_node:
+            self.client.unmap_lun(path, igroup)
+
+            mock_create_node.assert_called_once_with(
+                'lun-unmap',
+                **{'path': path, 'initiator-group': igroup})
+            self.connection.invoke_successfully.assert_called_once_with(
+                mock.ANY, True)
+
+    def test_unmap_lun_with_api_error(self):
+        path = '/vol/%s/%s' % (self.fake_volume, self.fake_lun)
+        igroup = 'igroup'
+        self.connection.invoke_successfully.side_effect =\
+            netapp_api.NaApiError()
+
+        with mock.patch.object(netapp_api.NaElement,
+                               'create_node_with_children',
+                               ) as mock_create_node:
+            self.assertRaises(netapp_api.NaApiError, self.client.unmap_lun,
+                              path, igroup)
+
+            mock_create_node.assert_called_once_with(
+                'lun-unmap',
+                **{'path': path, 'initiator-group': igroup})
+
+    def test_unmap_lun_already_unmapped(self):
+        path = '/vol/%s/%s' % (self.fake_volume, self.fake_lun)
+        igroup = 'igroup'
+        EINVALIDINPUTERROR = '13115'
+        self.connection.invoke_successfully.side_effect =\
+            netapp_api.NaApiError(code=EINVALIDINPUTERROR)
+
+        with mock.patch.object(netapp_api.NaElement,
+                               'create_node_with_children',
+                               ) as mock_create_node:
+            self.client.unmap_lun(path, igroup)
+
+            mock_create_node.assert_called_once_with(
+                'lun-unmap',
+                **{'path': path, 'initiator-group': igroup})
+            self.connection.invoke_successfully.assert_called_once_with(
+                mock.ANY, True)
+
+    def test_unmap_lun_lun_not_mapped_in_group(self):
+        path = '/vol/%s/%s' % (self.fake_volume, self.fake_lun)
+        igroup = 'igroup'
+        EVDISK_ERROR_NO_SUCH_LUNMAP = '9016'
+        self.connection.invoke_successfully.side_effect =\
+            netapp_api.NaApiError(code=EVDISK_ERROR_NO_SUCH_LUNMAP)
+
+        with mock.patch.object(netapp_api.NaElement,
+                               'create_node_with_children',
+                               ) as mock_create_node:
+            self.client.unmap_lun(path, igroup)
+
+            mock_create_node.assert_called_once_with(
+                'lun-unmap',
+                **{'path': path, 'initiator-group': igroup})
+            self.connection.invoke_successfully.assert_called_once_with(
+                mock.ANY, True)

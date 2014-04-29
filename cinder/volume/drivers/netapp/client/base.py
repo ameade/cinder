@@ -13,6 +13,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import sys
+
 
 from cinder.openstack.common import log as logging
 from cinder.volume.drivers.netapp import api as netapp_api
@@ -56,3 +58,32 @@ class Client(object):
         self.connection.invoke_successfully(lun_destroy, True)
         seg = path.split("/")
         LOG.debug(_("Destroyed LUN %s") % seg[-1])
+
+    def map_lun(self, path, igroup_name, lun_id=None):
+        """Maps lun to the initiator and returns lun id assigned."""
+        lun_map = netapp_api.NaElement.create_node_with_children(
+            'lun-map', **{'path': path,
+                          'initiator-group': igroup_name})
+        if lun_id:
+            lun_map.add_new_child('lun-id', lun_id)
+        result = self.connection.invoke_successfully(lun_map, True)
+        return result.get_child_content('lun-id-assigned')
+
+    def unmap_lun(self, path, igroup_name):
+        """Unmaps a lun from given initiator."""
+        lun_unmap = netapp_api.NaElement.create_node_with_children(
+            'lun-unmap',
+            **{'path': path, 'initiator-group': igroup_name})
+        try:
+            self.connection.invoke_successfully(lun_unmap, True)
+        except netapp_api.NaApiError as e:
+            msg = _("Error unmapping lun. Code :%(code)s,"
+                    " Message:%(message)s")
+            msg_fmt = {'code': e.code, 'message': e.message}
+            exc_info = sys.exc_info()
+            LOG.warn(msg % msg_fmt)
+            # if the lun is already unmapped
+            if e.code == '13115' or e.code == '9016':
+                pass
+            else:
+                raise exc_info[0], exc_info[1], exc_info[2]
