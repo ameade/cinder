@@ -66,8 +66,16 @@ class Client(object):
                           'initiator-group': igroup_name})
         if lun_id:
             lun_map.add_new_child('lun-id', lun_id)
-        result = self.connection.invoke_successfully(lun_map, True)
-        return result.get_child_content('lun-id-assigned')
+        try:
+            result = self.connection.invoke_successfully(lun_map, True)
+            return result.get_child_content('lun-id-assigned')
+        except netapp_api.NaApiError as e:
+            code = e.code
+            message = e.message
+            msg = _('Error mapping lun. Code :%(code)s, Message:%(message)s')
+            msg_fmt = {'code': code, 'message': message}
+            LOG.warn(msg % msg_fmt)
+            raise
 
     def unmap_lun(self, path, igroup_name):
         """Unmaps a lun from given initiator."""

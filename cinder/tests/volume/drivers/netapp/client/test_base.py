@@ -170,6 +170,24 @@ class NetAppBaseClientTestCase(test.TestCase):
                 mock.ANY, True)
             self.assertEqual(expected_lun_id, actual_lun_id)
 
+    def test_map_lun_with_api_error(self):
+        path = '/vol/%s/%s' % (self.fake_volume, self.fake_lun)
+        igroup = 'igroup'
+        self.connection.invoke_successfully.side_effect =\
+            netapp_api.NaApiError()
+
+        with mock.patch.object(netapp_api.NaElement,
+                               'create_node_with_children',
+                               ) as mock_create_node:
+            self.assertRaises(netapp_api.NaApiError, self.client.map_lun,
+                              path, igroup)
+
+            mock_create_node.assert_called_once_with(
+                'lun-map',
+                **{'path': path, 'initiator-group': igroup})
+            self.connection.invoke_successfully.assert_called_once_with(
+                mock.ANY, True)
+
     def test_unmap_lun(self):
         path = '/vol/%s/%s' % (self.fake_volume, self.fake_lun)
         igroup = 'igroup'
