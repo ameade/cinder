@@ -65,9 +65,7 @@ class NetAppCmodeClientTestCase(test.TestCase):
                               <iscsi-interface-list-entry-info>
                                 <ip-address>%(address)s</ip-address>
                                 <ip-port>%(port)s</ip-port>
-                                <is-interface-enabled>
-                                  %(interface-enabled)s
-                                </is-interface-enabled>
+            <is-interface-enabled>%(interface-enabled)s</is-interface-enabled>
                                 <tpgroup-tag>%(tpgroup-tag)s</tpgroup-tag>
                               </iscsi-interface-list-entry-info>
                             </attributes-list>
@@ -147,3 +145,77 @@ class NetAppCmodeClientTestCase(test.TestCase):
         luns = self.client.get_lun_list()
 
         self.assertEqual(4, len(luns))
+
+    def test_get_lun_map_no_luns_mapped(self):
+        path = '/vol/%s/%s' % (self.fake_volume, self.fake_lun)
+        version_response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                            <num-records>0</num-records>
+                            <attributes-list></attributes-list>
+                          </results>"""))
+        self.connection.invoke_successfully.return_value = version_response
+
+        lun_map = self.client.get_lun_map(path)
+
+        self.assertEqual([], lun_map)
+
+    def test_get_lun_map(self):
+        path = '/vol/%s/%s' % (self.fake_volume, self.fake_lun)
+        expected_lun_map = {
+            "initiator-group": "igroup",
+            "lun-id": "1337",
+            "vserver": "vserver",
+        }
+        version_response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                            <num-records>1</num-records>
+                            <attributes-list>
+                              <lun-map-info>
+                                <lun-id>%(lun-id)s</lun-id>
+                        <initiator-group>%(initiator-group)s</initiator-group>
+                                <vserver>%(vserver)s</vserver>
+                              </lun-map-info>
+                            </attributes-list>
+                          </results>""" % expected_lun_map))
+        self.connection.invoke_successfully.return_value = version_response
+
+        lun_map = self.client.get_lun_map(path)
+
+        self.assertEqual([expected_lun_map], lun_map)
+
+    def test_get_lun_map_multiple_pages(self):
+        path = '/vol/%s/%s' % (self.fake_volume, self.fake_lun)
+        expected_lun_map = {
+            "initiator-group": "igroup",
+            "lun-id": "1337",
+            "vserver": "vserver",
+        }
+        version_response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                            <num-records>1</num-records>
+                            <attributes-list>
+                              <lun-map-info>
+                                <lun-id>%(lun-id)s</lun-id>
+                        <initiator-group>%(initiator-group)s</initiator-group>
+                                <vserver>%(vserver)s</vserver>
+                              </lun-map-info>
+                            </attributes-list>
+                            <next-tag>blah</next-tag>
+                          </results>""" % expected_lun_map))
+        version_response_2 = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                            <num-records>1</num-records>
+                            <attributes-list>
+                              <lun-map-info>
+                                <lun-id>%(lun-id)s</lun-id>
+                        <initiator-group>%(initiator-group)s</initiator-group>
+                                <vserver>%(vserver)s</vserver>
+                              </lun-map-info>
+                            </attributes-list>
+                          </results>""" % expected_lun_map))
+        self.connection.invoke_successfully.side_effect = [version_response,
+                                                           version_response_2]
+
+        lun_map = self.client.get_lun_map(path)
+
+        self.assertEqual([expected_lun_map, expected_lun_map], lun_map)

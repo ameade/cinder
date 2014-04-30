@@ -86,3 +86,32 @@ class Client(base.Client):
             if tag is None:
                 break
         return luns
+
+    def get_lun_map(self, path):
+        """Gets the lun map by lun path."""
+        tag = None
+        map_list = []
+        while True:
+            lun_map_iter = netapp_api.NaElement('lun-map-get-iter')
+            lun_map_iter.add_new_child('max-records', '100')
+            if tag:
+                lun_map_iter.add_new_child('tag', tag, True)
+            query = netapp_api.NaElement('query')
+            lun_map_iter.add_child_elem(query)
+            query.add_node_with_children('lun-map-info', **{'path': path})
+            result = self.connection.invoke_successfully(lun_map_iter, True)
+            tag = result.get_child_content('next-tag')
+            if result.get_child_content('num-records') and \
+                    int(result.get_child_content('num-records')) >= 1:
+                attr_list = result.get_child_by_name('attributes-list')
+                lun_maps = attr_list.get_children()
+                for lun_map in lun_maps:
+                    lun_m = dict()
+                    lun_m['initiator-group'] = lun_map.get_child_content(
+                        'initiator-group')
+                    lun_m['lun-id'] = lun_map.get_child_content('lun-id')
+                    lun_m['vserver'] = lun_map.get_child_content('vserver')
+                    map_list.append(lun_m)
+            if tag is None:
+                break
+        return map_list
