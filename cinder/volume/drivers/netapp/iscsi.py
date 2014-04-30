@@ -386,7 +386,7 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
         Creates igroup if not found.
         """
 
-        igroups = self._get_igroup_by_initiator(initiator=initiator)
+        igroups = self.nclient.get_igroup_by_initiator(initiator=initiator)
         igroup_name = None
         for igroup in igroups:
             if igroup['initiator-group-os-type'] == os:
@@ -401,10 +401,6 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
             self.nclient.create_igroup(igroup_name, initiator_type, os)
             self.nclient.add_igroup_initiator(igroup_name, initiator)
         return igroup_name
-
-    def _get_igroup_by_initiator(self, initiator):
-        """Get igroups by initiator."""
-        raise NotImplementedError()
 
     def _check_allowed_os(self, os):
         """Checks if the os type supplied is NetApp supported."""
@@ -683,7 +679,8 @@ class NetAppDirectCmodeISCSIDriver(NetAppDirectISCSIDriver):
 
     def _find_mapped_lun_igroup(self, path, initiator, os=None):
         """Find the igroup for mapped lun with initiator."""
-        initiator_igroups = self._get_igroup_by_initiator(initiator=initiator)
+        initiator_igroups = self.nclient.get_igroup_by_initiator(
+            initiator=initiator)
         lun_maps = self.nclient.get_lun_map(path)
         if initiator_igroups and lun_maps:
             for igroup in initiator_igroups:
@@ -693,53 +690,6 @@ class NetAppDirectCmodeISCSIDriver(NetAppDirectISCSIDriver):
                         if lun_map['initiator-group'] == igroup_name:
                             return (igroup_name, lun_map['lun-id'])
         return (None, None)
-
-    def _get_igroup_by_initiator(self, initiator):
-        """Get igroups by initiator."""
-        tag = None
-        igroup_list = []
-        while True:
-            igroup_iter = NaElement('igroup-get-iter')
-            igroup_iter.add_new_child('max-records', '100')
-            if tag:
-                igroup_iter.add_new_child('tag', tag, True)
-            query = NaElement('query')
-            igroup_iter.add_child_elem(query)
-            igroup_info = NaElement('initiator-group-info')
-            query.add_child_elem(igroup_info)
-            igroup_info.add_new_child('vserver', self.vserver)
-            initiators = NaElement('initiators')
-            igroup_info.add_child_elem(initiators)
-            initiators.add_node_with_children('initiator-info',
-                                              **{'initiator-name': initiator})
-            des_attrs = NaElement('desired-attributes')
-            des_ig_info = NaElement('initiator-group-info')
-            des_attrs.add_child_elem(des_ig_info)
-            des_ig_info.add_node_with_children('initiators',
-                                               **{'initiator-info': None})
-            des_ig_info.add_new_child('vserver', None)
-            des_ig_info.add_new_child('initiator-group-name', None)
-            des_ig_info.add_new_child('initiator-group-type', None)
-            des_ig_info.add_new_child('initiator-group-os-type', None)
-            igroup_iter.add_child_elem(des_attrs)
-            result = self.client.invoke_successfully(igroup_iter, False)
-            tag = result.get_child_content('next-tag')
-            if result.get_child_content('num-records') and\
-                    int(result.get_child_content('num-records')) > 0:
-                attr_list = result.get_child_by_name('attributes-list')
-                igroups = attr_list.get_children()
-                for igroup in igroups:
-                    ig = dict()
-                    ig['initiator-group-os-type'] = igroup.get_child_content(
-                        'initiator-group-os-type')
-                    ig['initiator-group-type'] = igroup.get_child_content(
-                        'initiator-group-type')
-                    ig['initiator-group-name'] = igroup.get_child_content(
-                        'initiator-group-name')
-                    igroup_list.append(ig)
-            if tag is None:
-                break
-        return igroup_list
 
     def _clone_lun(self, name, new_name, space_reserved='true',
                    src_block=0, dest_block=0, block_count=0):
@@ -1006,35 +956,6 @@ class NetAppDirect7modeISCSIDriver(NetAppDirectISCSIDriver):
                 elif self._get_vol_option(avl_vol['name'], 'root') != 'true':
                         return avl_vol
         return None
-
-    def _get_igroup_by_initiator(self, initiator):
-        """Get igroups by initiator."""
-        igroup_list = NaElement('igroup-list-info')
-        result = self.client.invoke_successfully(igroup_list, True)
-        igroups = []
-        igs = result.get_child_by_name('initiator-groups')
-        if igs:
-            ig_infos = igs.get_children()
-            if ig_infos:
-                for info in ig_infos:
-                    initiators = info.get_child_by_name('initiators')
-                    init_infos = initiators.get_children()
-                    if init_infos:
-                        for init in init_infos:
-                            if init.get_child_content('initiator-name')\
-                                    == initiator:
-                                d = dict()
-                                d['initiator-group-os-type'] = \
-                                    info.get_child_content(
-                                        'initiator-group-os-type')
-                                d['initiator-group-type'] = \
-                                    info.get_child_content(
-                                        'initiator-group-type')
-                                d['initiator-group-name'] = \
-                                    info.get_child_content(
-                                        'initiator-group-name')
-                                igroups.append(d)
-        return igroups
 
     def _create_lun_handle(self, metadata):
         """Returns lun handle based on filer type."""

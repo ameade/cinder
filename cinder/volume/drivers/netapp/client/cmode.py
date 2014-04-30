@@ -115,3 +115,50 @@ class Client(base.Client):
             if tag is None:
                 break
         return map_list
+
+    def get_igroup_by_initiator(self, initiator):
+        """Get igroups by initiator."""
+        tag = None
+        igroup_list = []
+        while True:
+            igroup_iter = netapp_api.NaElement('igroup-get-iter')
+            igroup_iter.add_new_child('max-records', '100')
+            if tag:
+                igroup_iter.add_new_child('tag', tag, True)
+            query = netapp_api.NaElement('query')
+            igroup_iter.add_child_elem(query)
+            igroup_info = netapp_api.NaElement('initiator-group-info')
+            query.add_child_elem(igroup_info)
+            igroup_info.add_new_child('vserver', self.vserver)
+            initiators = netapp_api.NaElement('initiators')
+            igroup_info.add_child_elem(initiators)
+            initiators.add_node_with_children('initiator-info',
+                                              **{'initiator-name': initiator})
+            des_attrs = netapp_api.NaElement('desired-attributes')
+            des_ig_info = netapp_api.NaElement('initiator-group-info')
+            des_attrs.add_child_elem(des_ig_info)
+            des_ig_info.add_node_with_children('initiators',
+                                               **{'initiator-info': None})
+            des_ig_info.add_new_child('vserver', None)
+            des_ig_info.add_new_child('initiator-group-name', None)
+            des_ig_info.add_new_child('initiator-group-type', None)
+            des_ig_info.add_new_child('initiator-group-os-type', None)
+            igroup_iter.add_child_elem(des_attrs)
+            result = self.connection.invoke_successfully(igroup_iter, False)
+            tag = result.get_child_content('next-tag')
+            if result.get_child_content('num-records') and\
+                    int(result.get_child_content('num-records')) > 0:
+                attr_list = result.get_child_by_name('attributes-list')
+                igroups = attr_list.get_children()
+                for igroup in igroups:
+                    ig = dict()
+                    ig['initiator-group-os-type'] = igroup.get_child_content(
+                        'initiator-group-os-type')
+                    ig['initiator-group-type'] = igroup.get_child_content(
+                        'initiator-group-type')
+                    ig['initiator-group-name'] = igroup.get_child_content(
+                        'initiator-group-name')
+                    igroup_list.append(ig)
+            if tag is None:
+                break
+        return igroup_list

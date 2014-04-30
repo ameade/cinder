@@ -76,3 +76,32 @@ class Client(base.Client):
         result = self.connection.invoke_successfully(api, True)
         luns = result.get_child_by_name('luns')
         return luns.get_children()
+
+    def get_igroup_by_initiator(self, initiator):
+        """Get igroups by initiator."""
+        igroup_list = netapp_api.NaElement('igroup-list-info')
+        result = self.connection.invoke_successfully(igroup_list, True)
+        igroups = []
+        igs = result.get_child_by_name('initiator-groups')
+        if igs:
+            ig_infos = igs.get_children()
+            if ig_infos:
+                for info in ig_infos:
+                    initiators = info.get_child_by_name('initiators')
+                    init_infos = initiators.get_children()
+                    if init_infos:
+                        for init in init_infos:
+                            if init.get_child_content('initiator-name')\
+                                    == initiator:
+                                d = dict()
+                                d['initiator-group-os-type'] = \
+                                    info.get_child_content(
+                                        'initiator-group-os-type')
+                                d['initiator-group-type'] = \
+                                    info.get_child_content(
+                                        'initiator-group-type')
+                                d['initiator-group-name'] = \
+                                    info.get_child_content(
+                                        'initiator-group-name')
+                                igroups.append(d)
+        return igroups

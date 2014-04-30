@@ -181,3 +181,7 @@ class Client(object):
     def get_lun_list(self):
         """Gets the list of luns on filer."""
         raise NotImplementedError()
+
+    def get_igroup_by_initiator(self, initiator):
+        """Get igroups by initiator."""
+        raise NotImplementedError()

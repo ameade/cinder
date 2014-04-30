@@ -219,3 +219,74 @@ class NetAppCmodeClientTestCase(test.TestCase):
         lun_map = self.client.get_lun_map(path)
 
         self.assertEqual([expected_lun_map, expected_lun_map], lun_map)
+
+    def test_get_igroup_by_initiator_none_found(self):
+        initiator = 'initiator'
+        version_response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                            <num-records>0</num-records>
+                            <attributes-list></attributes-list>
+                          </results>"""))
+        self.connection.invoke_successfully.return_value = version_response
+
+        igroup = self.client.get_igroup_by_initiator(initiator)
+
+        self.assertEqual([], igroup)
+
+    def test_get_igroup_by_initiator(self):
+        initiator = 'initiator'
+        expected_igroup = {
+            "initiator-group-os-type": None,
+            "initiator-group-type": "1337",
+            "initiator-group-name": "vserver",
+        }
+        response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                            <num-records>1</num-records>
+                            <attributes-list>
+                              <initiator-group-info>
+    <initiator-group-type>%(initiator-group-type)s</initiator-group-type>
+    <initiator-group-name>%(initiator-group-name)s</initiator-group-name>
+                              </initiator-group-info>
+                            </attributes-list>
+                          </results>""" % expected_igroup))
+        self.connection.invoke_successfully.return_value = response
+
+        igroup = self.client.get_igroup_by_initiator(initiator)
+
+        self.assertEqual([expected_igroup], igroup)
+
+    def test_get_igroup_by_initiator_multiple_pages(self):
+        initiator = 'initiator'
+        expected_igroup = {
+            "initiator-group-os-type": None,
+            "initiator-group-type": "1337",
+            "initiator-group-name": "vserver",
+        }
+        response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                            <num-records>1</num-records>
+                            <attributes-list>
+                              <initiator-group-info>
+    <initiator-group-type>%(initiator-group-type)s</initiator-group-type>
+    <initiator-group-name>%(initiator-group-name)s</initiator-group-name>
+                              </initiator-group-info>
+                            </attributes-list>
+                            <next-tag>blah</next-tag>
+                          </results>""" % expected_igroup))
+        response_2 = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                            <num-records>1</num-records>
+                            <attributes-list>
+                              <initiator-group-info>
+    <initiator-group-type>%(initiator-group-type)s</initiator-group-type>
+    <initiator-group-name>%(initiator-group-name)s</initiator-group-name>
+                              </initiator-group-info>
+                            </attributes-list>
+                          </results>""" % expected_igroup))
+        self.connection.invoke_successfully.side_effect = [response,
+                                                           response_2]
+
+        igroup = self.client.get_igroup_by_initiator(initiator)
+
+        self.assertEqual([expected_igroup, expected_igroup], igroup)
