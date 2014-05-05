@@ -694,6 +694,7 @@ class NetAppDirectCmodeISCSIDriver(NetAppDirectISCSIDriver):
     def _clone_lun(self, name, new_name, space_reserved='true',
                    src_block=0, dest_block=0, block_count=0):
         """Clone LUN with the given handle to the new name."""
+#TODO
         metadata = self._get_lun_attr(name, 'metadata')
         volume = metadata['Volume']
         # zAPI can only handle 2^24 blocks per range
