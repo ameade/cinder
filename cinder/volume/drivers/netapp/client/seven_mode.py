@@ -14,6 +14,10 @@
 #    under the License.
 
 
+import math
+import time
+
+
 from cinder.openstack.common import log as logging
 from cinder.volume.drivers.netapp import api as netapp_api
 from cinder.volume.drivers.netapp.client import base
@@ -105,3 +109,92 @@ class Client(base.Client):
                                         'initiator-group-name')
                                 igroups.append(d)
         return igroups
+
+    def clone_lun(self, path, clone_path, name, new_name,
+                  space_reserved='true', src_block=0,
+                  dest_block=0, block_count=0):
+        # zAPI can only handle 2^24 blocks per range
+        bc_limit = 2 ** 24  # 8GB
+        # zAPI can only handle 32 block ranges per call
+        br_limit = 32
+        z_limit = br_limit * bc_limit  # 256 GB
+        z_calls = int(math.ceil(block_count / float(z_limit)))
+        zbc = block_count
+        if z_calls == 0:
+            z_calls = 1
+        for call in range(0, z_calls):
+            if zbc > z_limit:
+                block_count = z_limit
+                zbc -= z_limit
+            else:
+                block_count = zbc
+            clone_start = netapp_api.NaElement.create_node_with_children(
+                'clone-start', **{'source-path': path,
+                                  'destination-path': clone_path,
+                                  'no-snap': 'true'})
+            if block_count > 0:
+                block_ranges = netapp_api.NaElement("block-ranges")
+                # zAPI can only handle 2^24 block ranges
+                bc_limit = 2 ** 24  # 8GB
+                segments = int(math.ceil(block_count / float(bc_limit)))
+                bc = block_count
+                for segment in range(0, segments):
+                    if bc > bc_limit:
+                        block_count = bc_limit
+                        bc -= bc_limit
+                    else:
+                        block_count = bc
+                    block_range =\
+                        netapp_api.NaElement.create_node_with_children(
+                            'block-range',
+                            **{'source-block-number': str(src_block),
+                                'destination-block-number': str(dest_block),
+                                'block-count': str(block_count)})
+                    block_ranges.add_child_elem(block_range)
+                    src_block += int(block_count)
+                    dest_block += int(block_count)
+                clone_start.add_child_elem(block_ranges)
+            result = self.connection.invoke_successfully(clone_start, True)
+            clone_id_el = result.get_child_by_name('clone-id')
+            cl_id_info = clone_id_el.get_child_by_name('clone-id-info')
+            vol_uuid = cl_id_info.get_child_content('volume-uuid')
+            clone_id = cl_id_info.get_child_content('clone-op-id')
+            if vol_uuid:
+                self._check_clone_status(clone_id, vol_uuid, name, new_name)
+
+    def _check_clone_status(self, clone_id, vol_uuid, name, new_name):
+        """Checks for the job till completed."""
+        clone_status = netapp_api.NaElement('clone-list-status')
+        cl_id = netapp_api.NaElement('clone-id')
+        clone_status.add_child_elem(cl_id)
+        cl_id.add_node_with_children('clone-id-info',
+                                     **{'clone-op-id': clone_id,
+                                     'volume-uuid': vol_uuid})
+        running = True
+        clone_ops_info = None
+        while running:
+            result = self.connection.invoke_successfully(clone_status, True)
+            status = result.get_child_by_name('status')
+            ops_info = status.get_children()
+            if ops_info:
+                for info in ops_info:
+                    if info.get_child_content('clone-state') == 'running':
+                        time.sleep(1)
+                        break
+                    else:
+                        running = False
+                        clone_ops_info = info
+                        break
+        else:
+            if clone_ops_info:
+                fmt = {'name': name, 'new_name': new_name}
+                if clone_ops_info.get_child_content('clone-state')\
+                        == 'completed':
+                    LOG.debug(_("Clone operation with src %(name)s"
+                                " and dest %(new_name)s completed") % fmt)
+                else:
+                    LOG.debug(_("Clone operation with src %(name)s"
+                                " and dest %(new_name)s failed") % fmt)
+                    raise netapp_api.NaApiError(
+                        clone_ops_info.get_child_content('error'),
+                        clone_ops_info.get_child_content('reason'))

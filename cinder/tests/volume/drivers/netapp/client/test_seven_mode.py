@@ -148,3 +148,129 @@ class NetApp7modeClientTestCase(test.TestCase):
         igroup = self.client.get_igroup_by_initiator(initiator)
 
         self.assertEqual([expected_igroup], igroup)
+
+    def test_clone_lun(self):
+        fake_clone_start = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                           <clone-id>
+                             <clone-id-info>
+                               <clone-op-id>1337</clone-op-id>
+                               <volume-uuid>volume-uuid</volume-uuid>
+                             </clone-id-info>
+                           </clone-id>
+                         </results>"""))
+        fake_clone_status = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                           <status>
+                             <ops-info>
+                               <clone-state>completed</clone-state>
+                             </ops-info>
+                           </status>
+                         </results>"""))
+
+        self.connection.invoke_successfully.side_effect = [fake_clone_start,
+                                                           fake_clone_status]
+
+        self.client.clone_lun('path', 'new_path', 'fakeLUN', 'newFakeLUN')
+        self.assertEqual(2, self.connection.invoke_successfully.call_count)
+
+    def test_clone_lun_api_error(self):
+        fake_clone_start = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                           <clone-id>
+                             <clone-id-info>
+                               <clone-op-id>1337</clone-op-id>
+                               <volume-uuid>volume-uuid</volume-uuid>
+                             </clone-id-info>
+                           </clone-id>
+                         </results>"""))
+        fake_clone_status = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                           <status>
+                             <ops-info>
+                               <clone-state>error</clone-state>
+                             </ops-info>
+                           </status>
+                         </results>"""))
+
+        self.connection.invoke_successfully.side_effect = [fake_clone_start,
+                                                           fake_clone_status]
+
+        self.assertRaises(netapp_api.NaApiError, self.client.clone_lun,
+                          'path', 'new_path', 'fakeLUN', 'newFakeLUN')
+
+    def test_clone_lun_multiple_zapi_calls(self):
+        # Max block-ranges per call = 32, max blocks per range = 2^24
+        # Force 2 calls
+        bc = 2 ** 24 * 32 * 2
+        fake_clone_start = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                           <clone-id>
+                             <clone-id-info>
+                               <clone-op-id>1337</clone-op-id>
+                               <volume-uuid>volume-uuid</volume-uuid>
+                             </clone-id-info>
+                           </clone-id>
+                         </results>"""))
+        fake_clone_status = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                           <status>
+                             <ops-info>
+                               <clone-state>completed</clone-state>
+                             </ops-info>
+                           </status>
+                         </results>"""))
+
+        self.connection.invoke_successfully.side_effect = [fake_clone_start,
+                                                           fake_clone_status,
+                                                           fake_clone_start,
+                                                           fake_clone_status]
+
+        self.client.clone_lun('path', 'new_path', 'fakeLUN', 'newFakeLUN',
+                              block_count=bc)
+
+        self.assertEqual(4, self.connection.invoke_successfully.call_count)
+
+    def test_clone_lun_wait_for_clone_to_finish(self):
+        # Max block-ranges per call = 32, max blocks per range = 2^24
+        # Force 2 calls
+        bc = 2 ** 24 * 32 * 2
+        fake_clone_start = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                           <clone-id>
+                             <clone-id-info>
+                               <clone-op-id>1337</clone-op-id>
+                               <volume-uuid>volume-uuid</volume-uuid>
+                             </clone-id-info>
+                           </clone-id>
+                         </results>"""))
+        fake_clone_status = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                           <status>
+                             <ops-info>
+                               <clone-state>running</clone-state>
+                             </ops-info>
+                           </status>
+                         </results>"""))
+        fake_clone_status_completed = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                           <status>
+                             <ops-info>
+                               <clone-state>completed</clone-state>
+                             </ops-info>
+                           </status>
+                         </results>"""))
+
+        fake_responses = [fake_clone_start,
+                          fake_clone_status,
+                          fake_clone_status_completed,
+                          fake_clone_start,
+                          fake_clone_status_completed]
+        self.connection.invoke_successfully.side_effect = fake_responses
+
+        with mock.patch('time.sleep') as mock_sleep:
+            self.client.clone_lun('path', 'new_path', 'fakeLUN',
+                                  'newFakeLUN', block_count=bc)
+
+            mock_sleep.assert_called_once_with(1)
+            self.assertEqual(5, self.connection.invoke_successfully.call_count)

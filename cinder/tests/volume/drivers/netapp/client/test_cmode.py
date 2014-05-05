@@ -290,3 +290,17 @@ class NetAppCmodeClientTestCase(test.TestCase):
         igroup = self.client.get_igroup_by_initiator(initiator)
 
         self.assertEqual([expected_igroup, expected_igroup], igroup)
+
+    def test_clone_lun(self):
+        self.client.clone_lun('volume', 'fakeLUN', 'newFakeLUN')
+        self.assertEqual(1, self.connection.invoke_successfully.call_count)
+
+    def test_clone_lun_multiple_zapi_calls(self):
+        """Test for when lun clone requires more than one zapi call."""
+
+        # Max block-ranges per call = 32, max blocks per range = 2^24
+        # Force 2 calls
+        bc = 2 ** 24 * 32 * 2
+        self.client.clone_lun('volume', 'fakeLUN', 'newFakeLUN',
+                              block_count=bc)
+        self.assertEqual(2, self.connection.invoke_successfully.call_count)

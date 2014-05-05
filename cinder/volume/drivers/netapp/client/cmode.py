@@ -14,6 +14,9 @@
 #    under the License.
 
 
+import math
+
+
 from cinder.openstack.common import log as logging
 from cinder.volume.drivers.netapp import api as netapp_api
 from cinder.volume.drivers.netapp.client import base
@@ -162,3 +165,47 @@ class Client(base.Client):
             if tag is None:
                 break
         return igroup_list
+
+    def clone_lun(self, volume, name, new_name, space_reserved='true',
+                  src_block=0, dest_block=0, block_count=0):
+        # zAPI can only handle 2^24 blocks per range
+        bc_limit = 2 ** 24  # 8GB
+        # zAPI can only handle 32 block ranges per call
+        br_limit = 32
+        z_limit = br_limit * bc_limit  # 256 GB
+        z_calls = int(math.ceil(block_count / float(z_limit)))
+        zbc = block_count
+        if z_calls == 0:
+            z_calls = 1
+        for call in range(0, z_calls):
+            if zbc > z_limit:
+                block_count = z_limit
+                zbc -= z_limit
+            else:
+                block_count = zbc
+            clone_create = netapp_api.NaElement.create_node_with_children(
+                'clone-create',
+                **{'volume': volume, 'source-path': name,
+                   'destination-path': new_name,
+                   'space-reserve': space_reserved})
+            if block_count > 0:
+                block_ranges = netapp_api.NaElement("block-ranges")
+                segments = int(math.ceil(block_count / float(bc_limit)))
+                bc = block_count
+                for segment in range(0, segments):
+                    if bc > bc_limit:
+                        block_count = bc_limit
+                        bc -= bc_limit
+                    else:
+                        block_count = bc
+                    block_range =\
+                        netapp_api.NaElement.create_node_with_children(
+                            'block-range',
+                            **{'source-block-number': str(src_block),
+                               'destination-block-number': str(dest_block),
+                               'block-count': str(block_count)})
+                    block_ranges.add_child_elem(block_range)
+                    src_block += int(block_count)
+                    dest_block += int(block_count)
+                clone_create.add_child_elem(block_ranges)
+            self.connection.invoke_successfully(clone_create, True)

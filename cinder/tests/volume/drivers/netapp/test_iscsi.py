@@ -54,53 +54,12 @@ class NetAppiSCSICModeTestCase(test.TestCase):
     def tearDown(self):
         super(NetAppiSCSICModeTestCase, self).tearDown()
 
-    def test_clone_lun_multiple_zapi_calls(self):
-        """Test for when lun clone requires more than one zapi call."""
-
-        # Max block-ranges per call = 32, max blocks per range = 2^24
-        # Force 2 calls
-        bc = 2 ** 24 * 32 * 2
-        self.driver._get_lun_attr = mock.Mock(return_value={'Volume':
-                                                            'fakeLUN'})
-        self.driver.client.invoke_successfully = mock.Mock()
-        lun = ntapi.NaElement.create_node_with_children(
-            'lun-info',
-            **{'alignment': 'indeterminate',
-               'block-size': '512',
-               'comment': '',
-               'creation-timestamp': '1354536362',
-               'is-space-alloc-enabled': 'false',
-               'is-space-reservation-enabled': 'true',
-               'mapped': 'false',
-               'multiprotocol-type': 'linux',
-               'online': 'true',
-               'path': '/vol/fakeLUN/lun1',
-               'prefix-size': '0',
-               'qtree': '',
-               'read-only': 'false',
-               'serial-number': '2FfGI$APyN68',
-               'share-state': 'none',
-               'size': '20971520',
-               'size-used': '0',
-               'staging': 'false',
-               'suffix-size': '0',
-               'uuid': 'cec1f3d7-3d41-11e2-9cf4-123478563412',
-               'volume': 'fakeLUN',
-               'vserver': 'fake_vserver'})
-        self.driver._get_lun_by_args = mock.Mock(return_value=[lun])
-        self.driver._add_lun_to_table = mock.Mock()
-        self.driver._update_stale_vols = mock.Mock()
-
-        self.driver._clone_lun('fakeLUN', 'newFakeLUN', block_count=bc)
-
-        self.assertEqual(2, self.driver.client.invoke_successfully.call_count)
-
     def test_clone_lun_zero_block_count(self):
         """Test for when clone lun is not passed a block count."""
 
         self.driver._get_lun_attr = mock.Mock(return_value={'Volume':
                                                             'fakeLUN'})
-        self.driver.client.invoke_successfully = mock.Mock()
+        self.driver.nclient = mock.Mock()
         lun = ntapi.NaElement.create_node_with_children(
             'lun-info',
             **{'alignment': 'indeterminate',
@@ -131,7 +90,13 @@ class NetAppiSCSICModeTestCase(test.TestCase):
 
         self.driver._clone_lun('fakeLUN', 'newFakeLUN')
 
-        self.assertEqual(1, self.driver.client.invoke_successfully.call_count)
+        self.driver.nclient.clone_lun.assert_called_once_with('fakeLUN',
+                                                              'fakeLUN',
+                                                              'newFakeLUN',
+                                                              'true',
+                                                              block_count=0,
+                                                              dest_block=0,
+                                                              src_block=0)
 
 
 class NetAppiSCSI7ModeTestCase(test.TestCase):
@@ -147,61 +112,14 @@ class NetAppiSCSI7ModeTestCase(test.TestCase):
     def tearDown(self):
         super(NetAppiSCSI7ModeTestCase, self).tearDown()
 
-    def test_clone_lun_multiple_zapi_calls(self):
-        """Test for when lun clone requires more than one zapi call."""
-
-        # Max block-ranges per call = 32, max blocks per range = 2^24
-        # Force 2 calls
-        bc = 2 ** 24 * 32 * 2
-        self.driver._get_lun_attr = mock.Mock(return_value={'Volume':
-                                                            'fakeLUN',
-                                                            'Path':
-                                                            '/vol/fake/lun1'})
-        self.driver.client.invoke_successfully = mock.Mock(
-            return_value=mock.MagicMock())
-        lun = ntapi.NaElement.create_node_with_children(
-            'lun-info',
-            **{'alignment': 'indeterminate',
-               'block-size': '512',
-               'comment': '',
-               'creation-timestamp': '1354536362',
-               'is-space-alloc-enabled': 'false',
-               'is-space-reservation-enabled': 'true',
-               'mapped': 'false',
-               'multiprotocol-type': 'linux',
-               'online': 'true',
-               'path': '/vol/fakeLUN/lun1',
-               'prefix-size': '0',
-               'qtree': '',
-               'read-only': 'false',
-               'serial-number': '2FfGI$APyN68',
-               'share-state': 'none',
-               'size': '20971520',
-               'size-used': '0',
-               'staging': 'false',
-               'suffix-size': '0',
-               'uuid': 'cec1f3d7-3d41-11e2-9cf4-123478563412',
-               'volume': 'fakeLUN',
-               'vserver': 'fake_vserver'})
-        self.driver._get_lun_by_args = mock.Mock(return_value=[lun])
-        self.driver._add_lun_to_table = mock.Mock()
-        self.driver._update_stale_vols = mock.Mock()
-        self.driver._check_clone_status = mock.Mock()
-        self.driver._set_space_reserve = mock.Mock()
-
-        self.driver._clone_lun('fakeLUN', 'newFakeLUN', block_count=bc)
-
-        self.assertEqual(2, self.driver.client.invoke_successfully.call_count)
-
     def test_clone_lun_zero_block_count(self):
         """Test for when clone lun is not passed a block count."""
 
         self.driver._get_lun_attr = mock.Mock(return_value={'Volume':
-                                                            'fakeLUN',
+                                                            'lun1',
                                                             'Path':
                                                             '/vol/fake/lun1'})
-        self.driver.client.invoke_successfully = mock.Mock(
-            return_value=mock.MagicMock())
+        self.driver.nclient = mock.Mock()
         lun = ntapi.NaElement.create_node_with_children(
             'lun-info',
             **{'alignment': 'indeterminate',
@@ -232,6 +150,13 @@ class NetAppiSCSI7ModeTestCase(test.TestCase):
         self.driver._check_clone_status = mock.Mock()
         self.driver._set_space_reserve = mock.Mock()
 
-        self.driver._clone_lun('fakeLUN', 'newFakeLUN')
+        self.driver._clone_lun('lun1', 'lun2')
 
-        self.assertEqual(1, self.driver.client.invoke_successfully.call_count)
+        self.driver.nclient.clone_lun.assert_called_once_with('/vol/fake/lun1',
+                                                              '/vol/fake/lun2',
+                                                              'lun1',
+                                                              'lun2',
+                                                              'true',
+                                                              block_count=0,
+                                                              dest_block=0,
+                                                              src_block=0)
