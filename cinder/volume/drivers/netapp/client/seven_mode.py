@@ -198,3 +198,11 @@ class Client(base.Client):
                     raise netapp_api.NaApiError(
                         clone_ops_info.get_child_content('error'),
                         clone_ops_info.get_child_content('reason'))
+
+    def get_lun_by_args(self, **args):
+        """Retrieves luns with specified args."""
+        lun_info = netapp_api.NaElement.create_node_with_children(
+            'lun-list-info', **args)
+        result = self.connection.invoke_successfully(lun_info, True)
+        luns = result.get_child_by_name('luns')
+        return luns.get_children()

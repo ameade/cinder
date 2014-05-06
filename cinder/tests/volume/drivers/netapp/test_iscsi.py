@@ -60,6 +60,8 @@ class NetAppiSCSICModeTestCase(test.TestCase):
         self.driver._get_lun_attr = mock.Mock(return_value={'Volume':
                                                             'fakeLUN'})
         self.driver.nclient = mock.Mock()
+        self.driver.nclient.get_lun_by_args.return_value = [
+            mock.Mock(spec=ntapi.NaElement)]
         lun = ntapi.NaElement.create_node_with_children(
             'lun-info',
             **{'alignment': 'indeterminate',
@@ -120,6 +122,8 @@ class NetAppiSCSI7ModeTestCase(test.TestCase):
                                                             'Path':
                                                             '/vol/fake/lun1'})
         self.driver.nclient = mock.Mock()
+        self.driver.nclient.get_lun_by_args.return_value = [
+            mock.Mock(spec=ntapi.NaElement)]
         lun = ntapi.NaElement.create_node_with_children(
             'lun-info',
             **{'alignment': 'indeterminate',

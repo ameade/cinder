@@ -304,3 +304,56 @@ class NetAppCmodeClientTestCase(test.TestCase):
         self.client.clone_lun('volume', 'fakeLUN', 'newFakeLUN',
                               block_count=bc)
         self.assertEqual(2, self.connection.invoke_successfully.call_count)
+
+    def test_get_lun_by_args(self):
+        response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                            <num-records>2</num-records>
+                            <attributes-list>
+                              <lun-info>
+                              </lun-info>
+                            </attributes-list>
+                          </results>"""))
+        self.connection.invoke_successfully.return_value = response
+
+        lun = self.client.get_lun_by_args()
+
+        self.assertEqual(1, len(lun))
+
+    def test_get_lun_by_args_no_lun_found(self):
+        response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                            <num-records>2</num-records>
+                            <attributes-list>
+                            </attributes-list>
+                          </results>"""))
+        self.connection.invoke_successfully.return_value = response
+
+        lun = self.client.get_lun_by_args()
+
+        self.assertEqual(0, len(lun))
+
+    def test_get_lun_by_args_with_args_specified(self):
+        path = '/vol/%s/%s' % (self.fake_volume, self.fake_lun)
+        response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                            <num-records>2</num-records>
+                            <attributes-list>
+                              <lun-info>
+                              </lun-info>
+                            </attributes-list>
+                          </results>"""))
+        self.connection.invoke_successfully.return_value = response
+
+        lun = self.client.get_lun_by_args(path=path)
+
+        __, _args, __ = self.connection.invoke_successfully.mock_calls[0]
+        actual_request = _args[0]
+        query = actual_request.get_child_by_name('query')
+        lun_info_args = query.get_child_by_name('lun-info').get_children()
+
+        # Assert request is made with correct arguments
+        self.assertEqual('path', lun_info_args[0].get_name())
+        self.assertEqual(path, lun_info_args[0].get_content())
+
+        self.assertEqual(1, len(lun))

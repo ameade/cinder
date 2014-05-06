@@ -209,3 +209,14 @@ class Client(base.Client):
                     dest_block += int(block_count)
                 clone_create.add_child_elem(block_ranges)
             self.connection.invoke_successfully(clone_create, True)
+
+    def get_lun_by_args(self, **args):
+        """Retrieves lun with specified args."""
+        lun_iter = netapp_api.NaElement('lun-get-iter')
+        lun_iter.add_new_child('max-records', '100')
+        query = netapp_api.NaElement('query')
+        lun_iter.add_child_elem(query)
+        query.add_node_with_children('lun-info', **args)
+        luns = self.connection.invoke_successfully(lun_iter)
+        attr_list = luns.get_child_by_name('attributes-list')
+        return attr_list.get_children()

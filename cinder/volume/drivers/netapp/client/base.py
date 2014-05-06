@@ -185,3 +185,7 @@ class Client(object):
     def get_igroup_by_initiator(self, initiator):
         """Get igroups by initiator."""
         raise NotImplementedError()
+
+    def get_lun_by_args(self, **args):
+        """Retrieves luns with specified args."""
+        raise NotImplementedError()

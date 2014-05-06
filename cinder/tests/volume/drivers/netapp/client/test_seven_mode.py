@@ -274,3 +274,50 @@ class NetApp7modeClientTestCase(test.TestCase):
 
             mock_sleep.assert_called_once_with(1)
             self.assertEqual(5, self.connection.invoke_successfully.call_count)
+
+    def test_get_lun_by_args(self):
+        response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                           <luns>
+                            <lun-info></lun-info>
+                           </luns>
+                          </results>"""))
+        self.connection.invoke_successfully.return_value = response
+
+        luns = self.client.get_lun_by_args()
+
+        self.assertEqual(1, len(luns))
+
+    def test_get_lun_by_args_no_lun_found(self):
+        response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                           <luns>
+                           </luns>
+                          </results>"""))
+        self.connection.invoke_successfully.return_value = response
+
+        luns = self.client.get_lun_by_args()
+
+        self.assertEqual(0, len(luns))
+
+    def test_get_lun_by_args_with_args_specified(self):
+        path = '/vol/%s/%s' % (self.fake_volume, self.fake_lun)
+        response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                           <luns>
+                            <lun-info></lun-info>
+                           </luns>
+                          </results>"""))
+        self.connection.invoke_successfully.return_value = response
+
+        lun = self.client.get_lun_by_args(path=path)
+
+        __, _args, __ = self.connection.invoke_successfully.mock_calls[0]
+        actual_request = _args[0]
+        lun_info_args = actual_request.get_children()
+
+        # Assert request is made with correct arguments
+        self.assertEqual('path', lun_info_args[0].get_name())
+        self.assertEqual(path, lun_info_args[0].get_content())
+
+        self.assertEqual(1, len(lun))

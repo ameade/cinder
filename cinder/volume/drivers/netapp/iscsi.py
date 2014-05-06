@@ -434,10 +434,6 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
         """Clone LUN with the given name to the new name."""
         raise NotImplementedError()
 
-    def _get_lun_by_args(self, **args):
-        """Retrieves luns with specified args."""
-        raise NotImplementedError()
-
     def _get_lun_attr(self, name, attr):
         """Get the lun attribute if found else None."""
         try:
@@ -585,7 +581,7 @@ class NetAppDirectISCSIDriver(driver.ISCSIDriver):
         """Gets block counts for the lun."""
         LOG.debug(_("Getting lun block count."))
         block_count = 0
-        lun_infos = self._get_lun_by_args(path=path)
+        lun_infos = self.nclient.get_lun_by_args(path=path)
         if not lun_infos:
             seg = path.split('/')
             msg = _('Failure getting lun info for %s.')
@@ -697,8 +693,9 @@ class NetAppDirectCmodeISCSIDriver(NetAppDirectISCSIDriver):
         self.nclient.clone_lun(volume, name, new_name, space_reserved,
                                src_block=0, dest_block=0, block_count=0)
         LOG.debug(_("Cloned LUN with new name %s") % new_name)
-        lun = self._get_lun_by_args(vserver=self.vserver, path='/vol/%s/%s'
-                                    % (volume, new_name))
+        lun = self.nclient.get_lun_by_args(vserver=self.vserver,
+                                           path='/vol/%s/%s'
+                                           % (volume, new_name))
         if len(lun) == 0:
             msg = _("No cloned lun named %s found on the filer")
             raise exception.VolumeBackendAPIException(data=msg % (new_name))
@@ -710,17 +707,6 @@ class NetAppDirectCmodeISCSIDriver(NetAppDirectISCSIDriver):
                                          clone_meta))
         self._update_stale_vols(
             volume=ssc_utils.NetAppVolume(volume, self.vserver))
-
-    def _get_lun_by_args(self, **args):
-        """Retrieves lun with specified args."""
-        lun_iter = NaElement('lun-get-iter')
-        lun_iter.add_new_child('max-records', '100')
-        query = NaElement('query')
-        lun_iter.add_child_elem(query)
-        query.add_node_with_children('lun-info', **args)
-        luns = self.client.invoke_successfully(lun_iter)
-        attr_list = luns.get_child_by_name('attributes-list')
-        return attr_list.get_children()
 
     def _create_lun_meta(self, lun):
         """Creates lun metadata dictionary."""
@@ -964,7 +950,7 @@ class NetAppDirect7modeISCSIDriver(NetAppDirectISCSIDriver):
                                dest_block=0, block_count=0)
 
         self.vol_refresh_voluntary = True
-        luns = self._get_lun_by_args(path=clone_path)
+        luns = self.nclient.get_lun_by_args(path=clone_path)
         if luns:
             cloned_lun = luns[0]
             self._set_space_reserve(clone_path, space_reserved)
@@ -983,13 +969,6 @@ class NetAppDirect7modeISCSIDriver(NetAppDirectISCSIDriver):
             'lun-set-space-reservation-info',
             **{'path': path, 'enable': enable})
         self.client.invoke_successfully(space_res, True)
-
-    def _get_lun_by_args(self, **args):
-        """Retrieves luns with specified args."""
-        lun_info = NaElement.create_node_with_children('lun-list-info', **args)
-        result = self.client.invoke_successfully(lun_info, True)
-        luns = result.get_child_by_name('luns')
-        return luns.get_children()
 
     def _create_lun_meta(self, lun):
         """Creates lun metadata dictionary."""
