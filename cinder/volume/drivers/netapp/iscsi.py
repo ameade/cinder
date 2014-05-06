@@ -939,7 +939,7 @@ class NetAppDirect7modeISCSIDriver(NetAppDirectISCSIDriver):
         luns = self.nclient.get_lun_by_args(path=clone_path)
         if luns:
             cloned_lun = luns[0]
-            self._set_space_reserve(clone_path, space_reserved)
+            self.nclient.set_space_reserve(clone_path, space_reserved)
             clone_meta = self._create_lun_meta(cloned_lun)
             handle = self._create_lun_handle(clone_meta)
             self._add_lun_to_table(
@@ -948,13 +948,6 @@ class NetAppDirect7modeISCSIDriver(NetAppDirectISCSIDriver):
                           clone_meta))
         else:
             raise NaApiError('ENOLUNENTRY', 'No Lun entry found on the filer')
-
-    def _set_space_reserve(self, path, enable):
-        """Sets the space reserve info."""
-        space_res = NaElement.create_node_with_children(
-            'lun-set-space-reservation-info',
-            **{'path': path, 'enable': enable})
-        self.client.invoke_successfully(space_res, True)
 
     def _create_lun_meta(self, lun):
         """Creates lun metadata dictionary."""

@@ -221,3 +221,10 @@ class Client(base.Client):
             'lun-map-list-info',
             **{'path': path})
         return self.connection.invoke_successfully(lun_map_list, True)
+
+    def set_space_reserve(self, path, enable):
+        """Sets the space reserve info."""
+        space_res = netapp_api.NaElement.create_node_with_children(
+            'lun-set-space-reservation-info',
+            **{'path': path, 'enable': enable})
+        self.connection.invoke_successfully(space_res, True)

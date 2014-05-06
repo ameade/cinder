@@ -360,3 +360,19 @@ class NetApp7modeClientTestCase(test.TestCase):
         # Assert request is made with correct arguments
         self.assertEqual('path', lun_info_args[0].get_name())
         self.assertEqual(path, lun_info_args[0].get_content())
+
+    def test_set_space_reserve(self):
+        path = '/vol/%s/%s' % (self.fake_volume, self.fake_lun)
+        self.connection.invoke_successfully.return_value = mock.Mock()
+
+        lun_map = self.client.set_space_reserve(path, 'true')
+
+        __, _args, __ = self.connection.invoke_successfully.mock_calls[0]
+        actual_request = _args[0]
+        lun_info_args = actual_request.get_children()
+
+        # Assert request is made with correct arguments
+        self.assertEqual('path', lun_info_args[0].get_name())
+        self.assertEqual(path, lun_info_args[0].get_content())
+        self.assertEqual('enable', lun_info_args[1].get_name())
+        self.assertEqual('true', lun_info_args[1].get_content())
