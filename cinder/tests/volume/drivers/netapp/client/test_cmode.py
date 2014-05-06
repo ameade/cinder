@@ -30,11 +30,6 @@ class NetAppCmodeClientTestCase(test.TestCase):
         self.client = cmode.Client(self.connection, 'fake_vserver')
         self.fake_volume = str(uuid.uuid4())
         self.fake_lun = str(uuid.uuid4())
-        self.fake_size = '1024'
-        self.fake_metadata = {
-            'OsType': 'linux',
-            'SpaceReserved': 'true',
-        }
 
     def tearDown(self):
         super(NetAppCmodeClientTestCase, self).tearDown()
