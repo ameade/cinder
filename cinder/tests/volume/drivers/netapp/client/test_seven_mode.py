@@ -321,3 +321,28 @@ class NetApp7modeClientTestCase(test.TestCase):
         self.assertEqual(path, lun_info_args[0].get_content())
 
         self.assertEqual(1, len(lun))
+
+    def test_get_filer_volumes(self):
+        response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                           <volumes>
+                            <volume-info></volume-info>
+                           </volumes>
+                          </results>"""))
+        self.connection.invoke_successfully.return_value = response
+
+        volumes = self.client.get_filer_volumes()
+
+        self.assertEqual(1, len(volumes))
+
+    def test_get_filer_volumes_no_volumes(self):
+        response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                           <volumes>
+                           </volumes>
+                          </results>"""))
+        self.connection.invoke_successfully.return_value = response
+
+        volumes = self.client.get_filer_volumes()
+
+        self.assertEqual([], volumes)

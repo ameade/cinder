@@ -206,3 +206,12 @@ class Client(base.Client):
         result = self.connection.invoke_successfully(lun_info, True)
         luns = result.get_child_by_name('luns')
         return luns.get_children()
+
+    def get_filer_volumes(self, volume=None):
+        """Returns list of filer volumes in api format."""
+        vol_request = netapp_api.NaElement('volume-list-info')
+        res = self.connection.invoke_successfully(vol_request, True)
+        volumes = res.get_child_by_name('volumes')
+        if volumes:
+            return volumes.get_children()
+        return []

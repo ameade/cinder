@@ -873,20 +873,9 @@ class NetAppDirect7modeISCSIDriver(NetAppDirectISCSIDriver):
         metadata['Qtree'] = None
         self.vol_refresh_voluntary = True
 
-    def _get_filer_volumes(self, volume=None):
-        """Returns list of filer volumes in api format."""
-        vol_request = NaElement('volume-list-info')
-        if volume:
-            vol_request.add_new_child('volume', volume)
-        res = self.client.invoke_successfully(vol_request, True)
-        volumes = res.get_child_by_name('volumes')
-        if volumes:
-            return volumes.get_children()
-        return []
-
     def _get_avl_volume_by_size(self, size):
         """Get the available volume by size."""
-        vols = self._get_filer_volumes()
+        vols = self.nclient.get_filer_volumes()
         for vol in vols:
             avl_size = vol.get_child_content('size-available')
             state = vol.get_child_content('state')
@@ -1037,7 +1026,7 @@ class NetAppDirect7modeISCSIDriver(NetAppDirectISCSIDriver):
         LOG.info(_("Refreshing capacity info for %s."), self.client)
         total_bytes = 0
         free_bytes = 0
-        vols = self._get_filer_volumes()
+        vols = self.nclient.get_filer_volumes()
         for vol in vols:
             volume = vol.get_child_content('name')
             if self.volume_list and not volume in self.volume_list:
