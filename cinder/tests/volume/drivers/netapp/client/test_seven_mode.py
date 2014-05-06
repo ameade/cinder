@@ -346,3 +346,17 @@ class NetApp7modeClientTestCase(test.TestCase):
         volumes = self.client.get_filer_volumes()
 
         self.assertEqual([], volumes)
+
+    def test_get_lun_map(self):
+        path = '/vol/%s/%s' % (self.fake_volume, self.fake_lun)
+        self.connection.invoke_successfully.return_value = mock.Mock()
+
+        lun_map = self.client.get_lun_map(path=path)
+
+        __, _args, __ = self.connection.invoke_successfully.mock_calls[0]
+        actual_request = _args[0]
+        lun_info_args = actual_request.get_children()
+
+        # Assert request is made with correct arguments
+        self.assertEqual('path', lun_info_args[0].get_name())
+        self.assertEqual(path, lun_info_args[0].get_content())

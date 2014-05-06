@@ -903,10 +903,7 @@ class NetAppDirect7modeISCSIDriver(NetAppDirectISCSIDriver):
 
     def _find_mapped_lun_igroup(self, path, initiator, os=None):
         """Find the igroup for mapped lun with initiator."""
-        lun_map_list = NaElement.create_node_with_children(
-            'lun-map-list-info',
-            **{'path': path})
-        result = self.client.invoke_successfully(lun_map_list, True)
+        result = self.nclient.get_lun_map(path)
         igroups = result.get_child_by_name('initiator-groups')
         if igroups:
             igroup = None

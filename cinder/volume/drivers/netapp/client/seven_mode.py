@@ -215,3 +215,9 @@ class Client(base.Client):
         if volumes:
             return volumes.get_children()
         return []
+
+    def get_lun_map(self, path):
+        lun_map_list = netapp_api.NaElement.create_node_with_children(
+            'lun-map-list-info',
+            **{'path': path})
+        return self.connection.invoke_successfully(lun_map_list, True)
