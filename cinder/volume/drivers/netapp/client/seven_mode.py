@@ -28,7 +28,7 @@ LOG = logging.getLogger(__name__)
 
 class Client(base.Client):
 
-    def __init__(self, connection, volume_list):
+    def __init__(self, connection, volume_list=None):
         super(Client, self).__init__(connection)
         self.volume_list = volume_list
 

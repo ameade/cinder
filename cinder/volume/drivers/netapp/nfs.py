@@ -35,6 +35,8 @@ from cinder import utils
 from cinder.volume.drivers.netapp.api import NaApiError
 from cinder.volume.drivers.netapp.api import NaElement
 from cinder.volume.drivers.netapp.api import NaServer
+from cinder.volume.drivers.netapp.client import cmode
+from cinder.volume.drivers.netapp.client import seven_mode
 from cinder.volume.drivers.netapp.options import netapp_basicauth_opts
 from cinder.volume.drivers.netapp.options import netapp_cluster_opts
 from cinder.volume.drivers.netapp.options import netapp_connection_opts
@@ -688,14 +690,6 @@ class NetAppDirectNfsDriver (NetAppNFSDriver):
         if not isinstance(elem, NaElement):
             raise ValueError('Expects NaElement')
 
-    def _get_ontapi_version(self):
-        """Gets the supported ontapi version."""
-        ontapi_version = NaElement('system-get-ontapi-version')
-        res = self._client.invoke_successfully(ontapi_version, False)
-        major = res.get_child_content('major-version')
-        minor = res.get_child_content('minor-version')
-        return (major, minor)
-
     def _get_export_ip_path(self, volume_id=None, share=None):
         """Returns export ip and path.
 
@@ -731,9 +725,10 @@ class NetAppDirectCmodeNfsDriver (NetAppDirectNfsDriver):
         """Do the customized set up on client for cluster mode."""
         # Default values to run first api
         client.set_api_version(1, 15)
-        (major, minor) = self._get_ontapi_version()
-        client.set_api_version(major, minor)
         self.vserver = self.configuration.netapp_vserver
+        self.zapi_client = cmode.Client(client, self.vserver)
+        (major, minor) = self.zapi_client.get_ontapi_version()
+        client.set_api_version(major, minor)
         self.ssc_vols = None
         self.stale_vols = set()
         if self.vserver:
@@ -1288,7 +1283,8 @@ class NetAppDirect7modeNfsDriver (NetAppDirectNfsDriver):
 
     def _do_custom_setup(self, client):
         """Do the customized set up on client if any for 7 mode."""
-        (major, minor) = self._get_ontapi_version()
+        self.zapi_client = seven_mode.Client(client)
+        (major, minor) = self.zapi_client.get_ontapi_version()
         client.set_api_version(major, minor)
 
     def check_for_setup_error(self):
