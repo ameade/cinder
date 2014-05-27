@@ -16,10 +16,11 @@
 
 import math
 
-
+from cinder import exception
 from cinder.openstack.common import log as logging
 from cinder.volume.drivers.netapp import api as netapp_api
 from cinder.volume.drivers.netapp.client import base
+from cinder.volume.drivers.netapp import utils as na_utils
 
 
 LOG = logging.getLogger(__name__)
@@ -230,3 +231,19 @@ class Client(base.Client):
                'file': file_path,
                'vserver': self.vserver})
         self.connection.invoke_successfully(file_assign_qos, True)
+
+    def get_if_info_by_ip(self, ip):
+        """Gets the network interface info by ip."""
+        net_if_iter = netapp_api.NaElement('net-interface-get-iter')
+        net_if_iter.add_new_child('max-records', '10')
+        query = netapp_api.NaElement('query')
+        net_if_iter.add_child_elem(query)
+        query.add_node_with_children(
+            'net-interface-info', **{'address': na_utils.resolve_hostname(ip)})
+        result = self.connection.invoke_successfully(net_if_iter, True)
+        if result.get_child_content('num-records') and \
+                        int(result.get_child_content('num-records')) >= 1:
+            attr_list = result.get_child_by_name('attributes-list')
+            return attr_list.get_children()
+        raise exception.NotFound(
+            _('No interface found on cluster for ip %s') % (ip))

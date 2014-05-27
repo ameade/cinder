@@ -835,27 +835,10 @@ class NetAppDirectCmodeNfsDriver (NetAppDirectNfsDriver):
     def _get_vserver_and_exp_vol(self, volume_id=None, share=None):
         """Gets the vserver and export volume for share."""
         (host_ip, export_path) = self._get_export_ip_path(volume_id, share)
-        ifs = self._get_if_info_by_ip(host_ip)
+        ifs = self.zapi_client.get_if_info_by_ip(host_ip)
         vserver = ifs[0].get_child_content('vserver')
         exp_volume = self._get_vol_by_junc_vserver(vserver, export_path)
         return (vserver, exp_volume)
-
-    def _get_if_info_by_ip(self, ip):
-        """Gets the network interface info by ip."""
-        net_if_iter = NaElement('net-interface-get-iter')
-        net_if_iter.add_new_child('max-records', '10')
-        query = NaElement('query')
-        net_if_iter.add_child_elem(query)
-        query.add_node_with_children(
-            'net-interface-info', **{'address': na_utils.resolve_hostname(ip)})
-        result = self._invoke_successfully(net_if_iter)
-        if result.get_child_content('num-records') and\
-                int(result.get_child_content('num-records')) >= 1:
-            attr_list = result.get_child_by_name('attributes-list')
-            return attr_list.get_children()
-        raise exception.NotFound(
-            _('No interface found on cluster for ip %s')
-            % (ip))
 
     def _get_vserver_ips(self, vserver):
         """Get ips for the vserver."""
@@ -1056,7 +1039,7 @@ class NetAppDirectCmodeNfsDriver (NetAppDirectNfsDriver):
     def _get_vserver_for_ip(self, ip):
         """Get vserver for the mentioned ip."""
         try:
-            ifs = self._get_if_info_by_ip(ip)
+            ifs = self.zapi_client.get_if_info_by_ip(ip)
             vserver = ifs[0].get_child_content('vserver')
             return vserver
         except Exception:

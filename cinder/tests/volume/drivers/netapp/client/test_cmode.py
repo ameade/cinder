@@ -17,6 +17,7 @@ from lxml import etree
 import mock
 import uuid
 
+from cinder import exception
 from cinder import test
 from cinder.volume.drivers.netapp import api as netapp_api
 from cinder.volume.drivers.netapp.client import cmode
@@ -376,3 +377,36 @@ class NetAppCmodeClientTestCase(test.TestCase):
         self.assertEqual(expected_policy_group, actual_policy_group)
         self.assertEqual(expected_file_path, actual_file_path)
         self.assertEqual(self.vserver, actual_vserver)
+
+    @mock.patch('cinder.volume.drivers.netapp.utils.resolve_hostname',
+                return_value='192.168.1.101')
+    def test_get_if_info_by_ip_not_found(self, mock_resolve_hostname):
+        fake_ip = '192.168.1.101'
+        response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                            <num-records>0</num-records>
+                            <attributes-list>
+                            </attributes-list>
+                          </results>"""))
+        self.connection.invoke_successfully.return_value = response
+
+        self.assertRaises(exception.NotFound, self.client.get_if_info_by_ip,
+                          fake_ip)
+
+    @mock.patch('cinder.volume.drivers.netapp.utils.resolve_hostname',
+                return_value='192.168.1.101')
+    def test_get_if_info_by_ip(self, mock_resolve_hostname):
+        fake_ip = '192.168.1.101'
+        response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                            <num-records>1</num-records>
+                            <attributes-list>
+                                <net-interface-info>
+                                </net-interface-info>
+                            </attributes-list>
+                          </results>"""))
+        self.connection.invoke_successfully.return_value = response
+
+        results = self.client.get_if_info_by_ip(fake_ip)
+
+        self.assertEqual(1, len(results))
