@@ -27,7 +27,8 @@ class NetAppCmodeClientTestCase(test.TestCase):
     def setUp(self):
         super(NetAppCmodeClientTestCase, self).setUp()
         self.connection = mock.MagicMock()
-        self.client = cmode.Client(self.connection, 'fake_vserver')
+        self.vserver = 'fake_vserver'
+        self.client = cmode.Client(self.connection, self.vserver)
         self.fake_volume = str(uuid.uuid4())
         self.fake_lun = str(uuid.uuid4())
 
@@ -41,7 +42,6 @@ class NetAppCmodeClientTestCase(test.TestCase):
                             <attributes-list></attributes-list>
                           </results>"""))
         self.connection.invoke_successfully.return_value = response
-
         target_list = self.client.get_target_details()
 
         self.assertEqual([], target_list)
@@ -352,3 +352,27 @@ class NetAppCmodeClientTestCase(test.TestCase):
         self.assertEqual(path, lun_info_args[0].get_content())
 
         self.assertEqual(1, len(lun))
+
+    def test_file_assign_qos(self):
+        expected_flex_vol = "fake_flex_vol"
+        expected_policy_group = "fake_policy_group"
+        expected_file_path = "fake_file_path"
+
+        self.client.file_assign_qos(expected_flex_vol, expected_policy_group,
+                                    expected_file_path)
+
+        __, _args, __ = self.connection.invoke_successfully.mock_calls[0]
+        actual_request = _args[0]
+        actual_flex_vol = actual_request.get_child_by_name('volume') \
+            .get_content()
+        actual_policy_group = actual_request \
+            .get_child_by_name('qos-policy-group-name').get_content()
+        actual_file_path = actual_request.get_child_by_name('file') \
+            .get_content()
+        actual_vserver = actual_request.get_child_by_name('vserver') \
+            .get_content()
+
+        self.assertEqual(expected_flex_vol, actual_flex_vol)
+        self.assertEqual(expected_policy_group, actual_policy_group)
+        self.assertEqual(expected_file_path, actual_file_path)
+        self.assertEqual(self.vserver, actual_vserver)

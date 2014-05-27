@@ -803,13 +803,9 @@ class NetAppDirectCmodeNfsDriver (NetAppDirectNfsDriver):
         export_path = share.split(':')[1]
         flex_vol_name = self._get_vol_by_junc_vserver(self.vserver,
                                                       export_path)
-        file_assign_qos = NaElement.create_node_with_children(
-            'file-assign-qos',
-            **{'volume': flex_vol_name,
-               'qos-policy-group-name': qos_policy_group,
-               'file': target_path,
-               'vserver': self.vserver})
-        self._invoke_successfully(file_assign_qos)
+        self.zapi_client.file_assign_qos(flex_vol_name,
+                                         qos_policy_group,
+                                         target_path)
 
     def _find_shares(self, size, extra_specs):
         """Finds suitable shares for given params."""

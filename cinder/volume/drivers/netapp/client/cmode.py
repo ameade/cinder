@@ -220,3 +220,13 @@ class Client(base.Client):
         luns = self.connection.invoke_successfully(lun_iter)
         attr_list = luns.get_child_by_name('attributes-list')
         return attr_list.get_children()
+
+    def file_assign_qos(self, flex_vol, qos_policy_group, file_path):
+        """Retrieves lun with specified args."""
+        file_assign_qos = netapp_api.NaElement.create_node_with_children(
+            'file-assign-qos',
+            **{'volume': flex_vol,
+               'qos-policy-group-name': qos_policy_group,
+               'file': file_path,
+               'vserver': self.vserver})
+        self.connection.invoke_successfully(file_assign_qos, True)
