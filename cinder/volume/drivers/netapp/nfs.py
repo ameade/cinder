@@ -260,6 +260,7 @@ class NetAppNFSDriver(nfs.NfsDriver):
 
     def _do_clone_rel_img_cache(self, src, dst, share, cache_file):
         """Do clone operation w.r.t image cache file."""
+
         @utils.synchronized(cache_file, external=True)
         def _do_clone():
             dir = self._get_mount_point_for_share(share)
@@ -267,31 +268,32 @@ class NetAppNFSDriver(nfs.NfsDriver):
             if not os.path.exists(file_path):
                 LOG.info(_('Cloning from cache to destination %s'), dst)
                 self._clone_volume(src, dst, volume_id=None, share=share)
+
         _do_clone()
 
     @utils.synchronized('clean_cache')
     def _spawn_clean_cache_job(self):
         """Spawns a clean task if not running."""
         if getattr(self, 'cleaning', None):
-                LOG.debug(_('Image cache cleaning in progress. Returning... '))
-                return
+            LOG.debug(_('Image cache cleaning in progress. Returning... '))
+            return
         else:
-                #set cleaning to True
-                self.cleaning = True
-                t = Timer(0, self._clean_image_cache)
-                t.start()
+            #set cleaning to True
+            self.cleaning = True
+            t = Timer(0, self._clean_image_cache)
+            t.start()
 
     def _clean_image_cache(self):
         """Clean the image cache files in cache of space crunch."""
         try:
             LOG.debug(_('Image cache cleaning in progress.'))
-            thres_size_perc_start =\
+            thres_size_perc_start = \
                 self.configuration.thres_avl_size_perc_start
-            thres_size_perc_stop =\
+            thres_size_perc_stop = \
                 self.configuration.thres_avl_size_perc_stop
             for share in getattr(self, '_mounted_shares', []):
                 try:
-                    total_size, total_avl, total_alc =\
+                    total_size, total_avl, total_alc = \
                         self._get_capacity_info(share)
                     avl_percent = int((total_avl / total_size) * 100)
                     if avl_percent <= thres_size_perc_start:
@@ -310,7 +312,7 @@ class NetAppNFSDriver(nfs.NfsDriver):
                     LOG.warn(_(
                         'Exception during cache cleaning'
                         ' %(share)s. Message - %(ex)s')
-                        % {'share': share, 'ex': e.__str__()})
+                             % {'share': share, 'ex': e.__str__()})
                     continue
         finally:
             LOG.debug(_('Image cache cleaning done.'))
@@ -352,10 +354,11 @@ class NetAppNFSDriver(nfs.NfsDriver):
                         if self._delete_file(file_path):
                             return True
                         return False
+
                     if _do_delete():
-                            bytes_to_free = bytes_to_free - int(f[1])
-                            if bytes_to_free <= 0:
-                                return
+                        bytes_to_free = bytes_to_free - int(f[1])
+                        if bytes_to_free <= 0:
+                            return
 
     def _delete_file(self, path):
         """Delete file from disk and return result as boolean."""
@@ -460,7 +463,7 @@ class NetAppNFSDriver(nfs.NfsDriver):
                 if data.file_format != "raw":
                     raise exception.InvalidResults(
                         _("Converted to raw, but"
-                            " format is now %s") % data.file_format)
+                          " format is now %s") % data.file_format)
                 else:
                     cloned = True
                     self._register_image_in_cache(
@@ -533,7 +536,7 @@ class NetAppNFSDriver(nfs.NfsDriver):
         """
         conn, dr = None, None
         if image_location:
-            nfs_loc_pattern =\
+            nfs_loc_pattern = \
                 ('^nfs://(([\w\-\.]+:{1}[\d]+|[\w\-\.]+)(/[^\/].*)'
                  '*(/[^\/\\\\]+)$)')
             matched = re.match(nfs_loc_pattern, image_location, flags=0)
@@ -627,6 +630,7 @@ class NetAppNFSDriver(nfs.NfsDriver):
 
     def _move_nfs_file(self, source_path, dest_path):
         """Moves source to destination."""
+
         @utils.synchronized(dest_path, external=True)
         def _move_file(src, dst):
             if os.path.exists(dst):
@@ -643,7 +647,7 @@ class NetAppNFSDriver(nfs.NfsDriver):
         return False
 
 
-class NetAppDirectNfsDriver (NetAppNFSDriver):
+class NetAppDirectNfsDriver(NetAppNFSDriver):
     """Executes commands related to volumes on NetApp filer."""
 
     def __init__(self, *args, **kwargs):
@@ -713,7 +717,7 @@ class NetAppDirectNfsDriver (NetAppNFSDriver):
         return file_use
 
 
-class NetAppDirectCmodeNfsDriver (NetAppDirectNfsDriver):
+class NetAppDirectCmodeNfsDriver(NetAppDirectNfsDriver):
     """Executes commands related to volumes on c mode."""
 
     def __init__(self, *args, **kwargs):
@@ -744,23 +748,6 @@ class NetAppDirectCmodeNfsDriver (NetAppDirectNfsDriver):
         super(NetAppDirectCmodeNfsDriver, self).check_for_setup_error()
         if self.ssc_enabled:
             ssc_utils.check_ssc_api_permissions(self._client)
-
-    def _invoke_successfully(self, na_element, vserver=None):
-        """Invoke the api for successful result.
-
-        If vserver is present then invokes vserver api
-        else Cluster api.
-        :param vserver: vserver name.
-        """
-
-        self._is_naelement(na_element)
-        server = copy.copy(self._client)
-        if vserver:
-            server.set_vserver(vserver)
-        else:
-            server.set_vserver(None)
-        result = server.invoke_successfully(na_element, True)
-        return result
 
     def create_volume(self, volume):
         """Creates a volume.
@@ -877,31 +864,31 @@ class NetAppDirectCmodeNfsDriver (NetAppDirectNfsDriver):
         else:
             LOG.warn(_("No vserver set in config. SSC will be disabled."))
         if self.ssc_vols:
-            data['netapp_mirrored'] = 'true'\
+            data['netapp_mirrored'] = 'true' \
                 if self.ssc_vols['mirrored'] else 'false'
-            data['netapp_unmirrored'] = 'true'\
-                if len(self.ssc_vols['all']) >\
-                len(self.ssc_vols['mirrored']) else 'false'
-            data['netapp_dedup'] = 'true'\
+            data['netapp_unmirrored'] = 'true' \
+                if len(self.ssc_vols['all']) > \
+                   len(self.ssc_vols['mirrored']) else 'false'
+            data['netapp_dedup'] = 'true' \
                 if self.ssc_vols['dedup'] else 'false'
-            data['netapp_nodedup'] = 'true'\
-                if len(self.ssc_vols['all']) >\
-                len(self.ssc_vols['dedup']) else 'false'
-            data['netapp_compression'] = 'true'\
+            data['netapp_nodedup'] = 'true' \
+                if len(self.ssc_vols['all']) > \
+                   len(self.ssc_vols['dedup']) else 'false'
+            data['netapp_compression'] = 'true' \
                 if self.ssc_vols['compression'] else 'false'
-            data['netapp_nocompression'] = 'true'\
-                if len(self.ssc_vols['all']) >\
-                len(self.ssc_vols['compression']) else 'false'
-            data['netapp_thin_provisioned'] = 'true'\
+            data['netapp_nocompression'] = 'true' \
+                if len(self.ssc_vols['all']) > \
+                   len(self.ssc_vols['compression']) else 'false'
+            data['netapp_thin_provisioned'] = 'true' \
                 if self.ssc_vols['thin'] else 'false'
-            data['netapp_thick_provisioned'] = 'true'\
-                if len(self.ssc_vols['all']) >\
-                len(self.ssc_vols['thin']) else 'false'
+            data['netapp_thick_provisioned'] = 'true' \
+                if len(self.ssc_vols['all']) > \
+                   len(self.ssc_vols['thin']) else 'false'
             if self.ssc_vols['all']:
                 vol_max = max(self.ssc_vols['all'])
-                data['total_capacity_gb'] =\
+                data['total_capacity_gb'] = \
                     int(vol_max.space['size_total_bytes']) / units.GiB
-                data['free_capacity_gb'] =\
+                data['free_capacity_gb'] = \
                     int(vol_max.space['size_avl_bytes']) / units.GiB
             else:
                 data['total_capacity_gb'] = 0
@@ -934,7 +921,7 @@ class NetAppDirectCmodeNfsDriver (NetAppDirectNfsDriver):
                 junction = sh.split(':')[1]
                 ip = na_utils.resolve_hostname(host)
                 if (self._ip_in_ifs(ip, vs_ifs) and
-                        junction == vol.id['junction_path']):
+                            junction == vol.id['junction_path']):
                     mnt_share_vols.add(vol)
                     vol.export['path'] = sh
                     break
@@ -1200,7 +1187,7 @@ class NetAppDirectCmodeNfsDriver (NetAppDirectNfsDriver):
                 self._delete_file(dst_img_local)
 
 
-class NetAppDirect7modeNfsDriver (NetAppDirectNfsDriver):
+class NetAppDirect7modeNfsDriver(NetAppDirectNfsDriver):
     """Executes commands related to volumes on 7 mode."""
 
     def __init__(self, *args, **kwargs):
@@ -1282,8 +1269,8 @@ class NetAppDirect7modeNfsDriver (NetAppDirectNfsDriver):
         clone_start = NaElement.create_node_with_children(
             'clone-start',
             **{'source-path': src_path,
-                'destination-path': dest_path,
-                'no-snap': 'true'})
+               'destination-path': dest_path,
+               'no-snap': 'true'})
         result = self._invoke_successfully(clone_start, None)
         clone_id_el = result.get_child_by_name('clone-id')
         cl_id_info = clone_id_el.get_child_by_name('clone-id-info')
@@ -1298,7 +1285,7 @@ class NetAppDirect7modeNfsDriver (NetAppDirectNfsDriver):
         clone_ls_st.add_child_elem(clone_id)
         clone_id.add_node_with_children('clone-id-info',
                                         **{'clone-op-id': clone_op_id,
-                                            'volume-uuid': vol_uuid})
+                                           'volume-uuid': vol_uuid})
         task_running = True
         while task_running:
             result = self._invoke_successfully(clone_ls_st, None)

@@ -44,8 +44,8 @@ class Client(base.Client):
         iscsi_if_iter = netapp_api.NaElement('iscsi-interface-get-iter')
         result = self.connection.invoke_successfully(iscsi_if_iter, True)
         tgt_list = []
-        if result.get_child_content('num-records')\
-                and int(result.get_child_content('num-records')) >= 1:
+        num_records = result.get_child_content('num-records')
+        if num_records and int(num_records) >= 1:
             attr_list = result.get_child_by_name('attributes-list')
             iscsi_if_list = attr_list.get_children()
             for iscsi_if in iscsi_if_list:
@@ -248,8 +248,8 @@ class Client(base.Client):
         query.add_node_with_children(
             'net-interface-info', **{'address': na_utils.resolve_hostname(ip)})
         result = self.connection.invoke_successfully(net_if_iter, True)
-        if result.get_child_content('num-records') and \
-                        int(result.get_child_content('num-records')) >= 1:
+        num_records = result.get_child_content('num-records')
+        if num_records and int(num_records) >= 1:
             attr_list = result.get_child_by_name('attributes-list')
             return attr_list.get_children()
         raise exception.NotFound(
@@ -272,8 +272,8 @@ class Client(base.Client):
                                          **{'volume-id-attributes': None})
         vol_iter.add_child_elem(des_attrs)
         result = self._invoke_vserver_api(vol_iter, vserver)
-        if result.get_child_content('num-records') and \
-                        int(result.get_child_content('num-records')) >= 1:
+        num_records = result.get_child_content('num-records')
+        if num_records and int(num_records) >= 1:
             attr_list = result.get_child_by_name('attributes-list')
             vols = attr_list.get_children()
             vol_id = vols[0].get_child_by_name('volume-id-attributes')
