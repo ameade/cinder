@@ -801,8 +801,8 @@ class NetAppDirectCmodeNfsDriver (NetAppDirectNfsDriver):
     def _set_qos_policy_group_on_volume(self, volume, share, qos_policy_group):
         target_path = '%s' % (volume['name'])
         export_path = share.split(':')[1]
-        flex_vol_name = self._get_vol_by_junc_vserver(self.vserver,
-                                                      export_path)
+        flex_vol_name = self.zapi_client.get_vol_by_junc_vserver(self.vserver,
+                                                                 export_path)
         self.zapi_client.file_assign_qos(flex_vol_name,
                                          qos_policy_group,
                                          target_path)
@@ -828,7 +828,8 @@ class NetAppDirectCmodeNfsDriver (NetAppDirectNfsDriver):
                       volume_id, share=None):
         """Clones mounted volume on NetApp Cluster."""
         (vserver, exp_volume) = self._get_vserver_and_exp_vol(volume_id, share)
-        self._clone_file(exp_volume, volume_name, clone_name, vserver)
+        self.zapi_client.clone_file(exp_volume, volume_name, clone_name,
+                                    vserver)
         share = share if share else self._get_provider_location(volume_id)
         self._post_prov_deprov_in_ssc(share)
 
@@ -837,7 +838,8 @@ class NetAppDirectCmodeNfsDriver (NetAppDirectNfsDriver):
         (host_ip, export_path) = self._get_export_ip_path(volume_id, share)
         ifs = self.zapi_client.get_if_info_by_ip(host_ip)
         vserver = ifs[0].get_child_content('vserver')
-        exp_volume = self._get_vol_by_junc_vserver(vserver, export_path)
+        exp_volume = self.zapi_client.get_vol_by_junc_vserver(vserver,
+                                                              export_path)
         return (vserver, exp_volume)
 
     def _get_vserver_ips(self, vserver):
@@ -853,51 +855,6 @@ class NetAppDirectCmodeNfsDriver (NetAppDirectNfsDriver):
                 ifs = attr_list.get_children()
                 if_list.extend(ifs)
         return if_list
-
-    def _get_vol_by_junc_vserver(self, vserver, junction):
-        """Gets the volume by junction path and vserver."""
-        vol_iter = NaElement('volume-get-iter')
-        vol_iter.add_new_child('max-records', '10')
-        query = NaElement('query')
-        vol_iter.add_child_elem(query)
-        vol_attrs = NaElement('volume-attributes')
-        query.add_child_elem(vol_attrs)
-        vol_attrs.add_node_with_children(
-            'volume-id-attributes',
-            **{'junction-path': junction,
-                'owning-vserver-name': vserver})
-        des_attrs = NaElement('desired-attributes')
-        des_attrs.add_node_with_children('volume-attributes',
-                                         **{'volume-id-attributes': None})
-        vol_iter.add_child_elem(des_attrs)
-        result = self._invoke_successfully(vol_iter, vserver)
-        if result.get_child_content('num-records') and\
-                int(result.get_child_content('num-records')) >= 1:
-            attr_list = result.get_child_by_name('attributes-list')
-            vols = attr_list.get_children()
-            vol_id = vols[0].get_child_by_name('volume-id-attributes')
-            return vol_id.get_child_content('name')
-        msg_fmt = {'vserver': vserver, 'junction': junction}
-        raise exception.NotFound(_("""No volume on cluster with vserver
-                                   %(vserver)s and junction path %(junction)s
-                                   """) % msg_fmt)
-
-    def _clone_file(self, volume, src_path, dest_path, vserver=None,
-                    dest_exists=False):
-        """Clones file on vserver."""
-        msg = _("""Cloning with params volume %(volume)s, src %(src_path)s,
-                    dest %(dest_path)s, vserver %(vserver)s""")
-        msg_fmt = {'volume': volume, 'src_path': src_path,
-                   'dest_path': dest_path, 'vserver': vserver}
-        LOG.debug(msg % msg_fmt)
-        clone_create = NaElement.create_node_with_children(
-            'clone-create',
-            **{'volume': volume, 'source-path': src_path,
-                'destination-path': dest_path})
-        major, minor = self._client.get_api_version()
-        if major == 1 and minor >= 20 and dest_exists:
-            clone_create.add_new_child('destination-exists', 'true')
-        self._invoke_successfully(clone_create, vserver)
 
     def _update_volume_stats(self):
         """Retrieve stats info from volume group."""
@@ -1171,8 +1128,8 @@ class NetAppDirectCmodeNfsDriver (NetAppDirectNfsDriver):
                                dest_exists=False):
         """Clone file even if dest exists."""
         (vserver, exp_volume) = self._get_vserver_and_exp_vol(share=share)
-        self._clone_file(exp_volume, src_name, dst_name, vserver,
-                         dest_exists=dest_exists)
+        self.zapi_client.clone_file(exp_volume, src_name, dst_name, vserver,
+                                    dest_exists=dest_exists)
 
     def _copy_from_img_service(self, context, volume, image_service,
                                image_id):

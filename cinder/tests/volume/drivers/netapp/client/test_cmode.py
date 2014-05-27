@@ -410,3 +410,115 @@ class NetAppCmodeClientTestCase(test.TestCase):
         results = self.client.get_if_info_by_ip(fake_ip)
 
         self.assertEqual(1, len(results))
+
+    def test_get_vol_by_junc_vserver_not_found(self):
+        fake_vserver = '192.168.1.101'
+        fake_junc = '192.168.1.101'
+        response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                            <num-records>0</num-records>
+                            <attributes-list>
+                            </attributes-list>
+                          </results>"""))
+        self.connection.invoke_successfully.return_value = response
+
+        self.assertRaises(exception.NotFound,
+                          self.client.get_vol_by_junc_vserver,
+                          fake_vserver, fake_junc)
+
+    def test_get_vol_by_junc_vserver(self):
+        fake_vserver = '192.168.1.101'
+        fake_junc = '192.168.1.101'
+        expected_flex_vol = 'fake_flex_vol'
+        response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                            <num-records>1</num-records>
+                            <attributes-list>
+                              <volume-attributes>
+                                <volume-id-attributes>
+                                  <name>%(flex_vol)s</name>
+                                </volume-id-attributes>
+                              </volume-attributes>
+                            </attributes-list>
+                          </results>""" % {'flex_vol': expected_flex_vol}))
+        self.connection.invoke_successfully.return_value = response
+
+        actual_flex_vol = self.client.get_vol_by_junc_vserver(fake_vserver,
+                                                              fake_junc)
+
+        self.assertEqual(expected_flex_vol, actual_flex_vol)
+
+    def test_clone_file(self):
+        expected_flex_vol = "fake_flex_vol"
+        expected_src_path = "fake_src_path"
+        expected_dest_path = "fake_dest_path"
+        self.connection.get_api_version.return_value = (1, 20)
+
+        self.client.clone_file(expected_flex_vol, expected_src_path,
+                               expected_dest_path, self.vserver)
+
+        __, _args, __ = self.connection.invoke_successfully.mock_calls[0]
+        actual_request = _args[0]
+        actual_flex_vol = actual_request.get_child_by_name('volume') \
+            .get_content()
+        actual_src_path = actual_request \
+            .get_child_by_name('source-path').get_content()
+        actual_dest_path = actual_request.get_child_by_name(
+            'destination-path').get_content()
+
+        self.assertEqual(expected_flex_vol, actual_flex_vol)
+        self.assertEqual(expected_src_path, actual_src_path)
+        self.assertEqual(expected_dest_path, actual_dest_path)
+        self.assertEqual(actual_request.get_child_by_name(
+            'destination-exists'), None)
+
+    def test_clone_file_when_destination_exists(self):
+        expected_flex_vol = "fake_flex_vol"
+        expected_src_path = "fake_src_path"
+        expected_dest_path = "fake_dest_path"
+        self.connection.get_api_version.return_value = (1, 20)
+
+        self.client.clone_file(expected_flex_vol, expected_src_path,
+                               expected_dest_path, self.vserver,
+                               dest_exists=True)
+
+        __, _args, __ = self.connection.invoke_successfully.mock_calls[0]
+        actual_request = _args[0]
+        actual_flex_vol = actual_request.get_child_by_name('volume') \
+            .get_content()
+        actual_src_path = actual_request \
+            .get_child_by_name('source-path').get_content()
+        actual_dest_path = actual_request.get_child_by_name(
+            'destination-path').get_content()
+
+        self.assertEqual(expected_flex_vol, actual_flex_vol)
+        self.assertEqual(expected_src_path, actual_src_path)
+        self.assertEqual(expected_dest_path, actual_dest_path)
+        self.assertEqual(actual_request.get_child_by_name(
+            'destination-exists').get_content(), 'true')
+
+    def test_clone_file_when_destination_exists_and_version_less_than_1_20(
+            self):
+        expected_flex_vol = "fake_flex_vol"
+        expected_src_path = "fake_src_path"
+        expected_dest_path = "fake_dest_path"
+        self.connection.get_api_version.return_value = (1, 19)
+
+        self.client.clone_file(expected_flex_vol, expected_src_path,
+                               expected_dest_path, self.vserver,
+                               dest_exists=True)
+
+        __, _args, __ = self.connection.invoke_successfully.mock_calls[0]
+        actual_request = _args[0]
+        actual_flex_vol = actual_request.get_child_by_name('volume') \
+            .get_content()
+        actual_src_path = actual_request \
+            .get_child_by_name('source-path').get_content()
+        actual_dest_path = actual_request.get_child_by_name(
+            'destination-path').get_content()
+
+        self.assertEqual(expected_flex_vol, actual_flex_vol)
+        self.assertEqual(expected_src_path, actual_src_path)
+        self.assertEqual(expected_dest_path, actual_dest_path)
+        self.assertEqual(actual_request.get_child_by_name(
+            'destination-exists'), None)

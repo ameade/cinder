@@ -14,6 +14,7 @@
 #    under the License.
 
 
+import copy
 import math
 
 from cinder import exception
@@ -31,6 +32,12 @@ class Client(base.Client):
     def __init__(self, connection, vserver):
         super(Client, self).__init__(connection)
         self.vserver = vserver
+
+    def _invoke_vserver_api(self, na_element, vserver):
+        server = copy.copy(self.connection)
+        server.set_vserver(vserver)
+        result = server.invoke_successfully(na_element, True)
+        return result
 
     def get_target_details(self):
         """Gets the target portal details."""
@@ -247,3 +254,48 @@ class Client(base.Client):
             return attr_list.get_children()
         raise exception.NotFound(
             _('No interface found on cluster for ip %s') % (ip))
+
+    def get_vol_by_junc_vserver(self, vserver, junction):
+        """Gets the volume by junction path and vserver."""
+        vol_iter = netapp_api.NaElement('volume-get-iter')
+        vol_iter.add_new_child('max-records', '10')
+        query = netapp_api.NaElement('query')
+        vol_iter.add_child_elem(query)
+        vol_attrs = netapp_api.NaElement('volume-attributes')
+        query.add_child_elem(vol_attrs)
+        vol_attrs.add_node_with_children(
+            'volume-id-attributes',
+            **{'junction-path': junction,
+               'owning-vserver-name': vserver})
+        des_attrs = netapp_api.NaElement('desired-attributes')
+        des_attrs.add_node_with_children('volume-attributes',
+                                         **{'volume-id-attributes': None})
+        vol_iter.add_child_elem(des_attrs)
+        result = self._invoke_vserver_api(vol_iter, vserver)
+        if result.get_child_content('num-records') and \
+                        int(result.get_child_content('num-records')) >= 1:
+            attr_list = result.get_child_by_name('attributes-list')
+            vols = attr_list.get_children()
+            vol_id = vols[0].get_child_by_name('volume-id-attributes')
+            return vol_id.get_child_content('name')
+        msg_fmt = {'vserver': vserver, 'junction': junction}
+        raise exception.NotFound(_("""No volume on cluster with vserver
+                                   %(vserver)s and junction path %(junction)s
+                                   """) % msg_fmt)
+
+    def clone_file(self, flex_vol, src_path, dest_path, vserver,
+                   dest_exists=False):
+        """Clones file on vserver."""
+        msg = _("""Cloning with params volume %(volume)s, src %(src_path)s,
+                    dest %(dest_path)s, vserver %(vserver)s""")
+        msg_fmt = {'volume': flex_vol, 'src_path': src_path,
+                   'dest_path': dest_path, 'vserver': vserver}
+        LOG.debug(msg % msg_fmt)
+        clone_create = netapp_api.NaElement.create_node_with_children(
+            'clone-create',
+            **{'volume': flex_vol, 'source-path': src_path,
+               'destination-path': dest_path})
+        major, minor = self.connection.get_api_version()
+        if major == 1 and minor >= 20 and dest_exists:
+            clone_create.add_new_child('destination-exists', 'true')
+        self._invoke_vserver_api(clone_create, vserver)

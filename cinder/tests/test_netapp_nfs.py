@@ -240,20 +240,19 @@ class NetappDirectCmodeNfsDriverTestCase(test.TestCase):
         volume = FakeVolume()
         setattr(volume, 'provider_location', '127.0.0.1:/nfs')
 
+        drv.zapi_client = mox.CreateMockAnything()
         mox.StubOutWithMock(drv, '_get_host_ip')
         mox.StubOutWithMock(drv, '_get_export_path')
-        mox.StubOutWithMock(drv, '_get_if_info_by_ip')
-        mox.StubOutWithMock(drv, '_get_vol_by_junc_vserver')
-        mox.StubOutWithMock(drv, '_clone_file')
         mox.StubOutWithMock(drv, '_post_prov_deprov_in_ssc')
 
+        drv.zapi_client.get_if_info_by_ip('127.0.0.1').AndReturn(
+            self._prepare_info_by_ip_response())
+        drv.zapi_client.get_vol_by_junc_vserver('openstack', '/nfs').AndReturn(
+            'nfsvol')
+        drv.zapi_client.clone_file('nfsvol', 'volume_name', 'clone_name',
+                                   'openstack')
         drv._get_host_ip(IgnoreArg()).AndReturn('127.0.0.1')
         drv._get_export_path(IgnoreArg()).AndReturn('/nfs')
-        drv._get_if_info_by_ip('127.0.0.1').AndReturn(
-            self._prepare_info_by_ip_response())
-        drv._get_vol_by_junc_vserver('openstack', '/nfs').AndReturn('nfsvol')
-        drv._clone_file('nfsvol', 'volume_name', 'clone_name',
-                        'openstack')
         drv._post_prov_deprov_in_ssc(IgnoreArg())
         return mox
 
