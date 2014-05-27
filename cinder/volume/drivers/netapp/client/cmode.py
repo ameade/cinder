@@ -299,3 +299,14 @@ class Client(base.Client):
         if major == 1 and minor >= 20 and dest_exists:
             clone_create.add_new_child('destination-exists', 'true')
         self._invoke_vserver_api(clone_create, vserver)
+
+    def get_file_usage(self, path, vserver):
+        """Gets the file unique bytes."""
+        LOG.debug(_('Getting file usage for %s'), path)
+        file_use = netapp_api.NaElement.create_node_with_children(
+            'file-usage-get', **{'path': path})
+        res = self._invoke_vserver_api(file_use, vserver)
+        unique_bytes = res.get_child_content('unique-bytes')
+        LOG.debug(_('file-usage for path %(path)s is %(bytes)s')
+                  % {'path': path, 'bytes': unique_bytes})
+        return unique_bytes

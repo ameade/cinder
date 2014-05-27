@@ -412,8 +412,8 @@ class NetAppCmodeClientTestCase(test.TestCase):
         self.assertEqual(1, len(results))
 
     def test_get_vol_by_junc_vserver_not_found(self):
-        fake_vserver = '192.168.1.101'
-        fake_junc = '192.168.1.101'
+        fake_vserver = 'fake_vserver'
+        fake_junc = 'fake_junction_path'
         response = netapp_api.NaElement(
             etree.XML("""<results status="passed">
                             <num-records>0</num-records>
@@ -427,8 +427,8 @@ class NetAppCmodeClientTestCase(test.TestCase):
                           fake_vserver, fake_junc)
 
     def test_get_vol_by_junc_vserver(self):
-        fake_vserver = '192.168.1.101'
-        fake_junc = '192.168.1.101'
+        fake_vserver = 'fake_vserver'
+        fake_junc = 'fake_junction_path'
         expected_flex_vol = 'fake_flex_vol'
         response = netapp_api.NaElement(
             etree.XML("""<results status="passed">
@@ -522,3 +522,17 @@ class NetAppCmodeClientTestCase(test.TestCase):
         self.assertEqual(expected_dest_path, actual_dest_path)
         self.assertEqual(actual_request.get_child_by_name(
             'destination-exists'), None)
+
+    def test_get_file_usage(self):
+        expected_bytes = "2048"
+        fake_vserver = 'fake_vserver'
+        fake_path = 'fake_path'
+        response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                           <unique-bytes>%(unique-bytes)s</unique-bytes>
+                         </results>""" % {'unique-bytes': expected_bytes}))
+        self.connection.invoke_successfully.return_value = response
+
+        actual_bytes = self.client.get_file_usage(fake_vserver, fake_path)
+
+        self.assertEqual(expected_bytes, actual_bytes)

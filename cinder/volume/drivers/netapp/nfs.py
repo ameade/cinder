@@ -959,21 +959,10 @@ class NetAppDirectCmodeNfsDriver (NetAppDirectNfsDriver):
             volume_id=None, share=share)
         for file in old_files:
             path = '/vol/%s/%s' % (exp_volume, file)
-            u_bytes = self._get_cluster_file_usage(path, vserver)
+            u_bytes = self.zapi_client.get_file_usage(path, vserver)
             file_list.append((file, u_bytes))
         LOG.debug(_('Shortlisted del elg files %s'), file_list)
         return file_list
-
-    def _get_cluster_file_usage(self, path, vserver):
-        """Gets the file unique bytes."""
-        LOG.debug(_('Getting file usage for %s'), path)
-        file_use = NaElement.create_node_with_children(
-            'file-usage-get', **{'path': path})
-        res = self._invoke_successfully(file_use, vserver)
-        bytes = res.get_child_content('unique-bytes')
-        LOG.debug(_('file-usage for path %(path)s is %(bytes)s')
-                  % {'path': path, 'bytes': bytes})
-        return bytes
 
     def _share_match_for_ip(self, ip, shares):
         """Returns the share that is served by ip.
