@@ -1247,16 +1247,6 @@ class NetAppDirect7modeNfsDriver(NetAppDirectNfsDriver):
                     self._clear_clone(clone_id)
                 raise e
 
-    def _get_actual_path_for_export(self, export_path):
-        """Gets the actual path on the filer for export path."""
-        storage_path = NaElement.create_node_with_children(
-            'nfs-exportfs-storage-path', **{'pathname': export_path})
-        result = self._invoke_successfully(storage_path, None)
-        if result.get_child_content('actual-pathname'):
-            return result.get_child_content('actual-pathname')
-        raise exception.NotFound(_('No storage path found for export path %s')
-                                 % (export_path))
-
     def _start_clone(self, src_path, dest_path):
         """Starts the clone operation.
 
