@@ -371,3 +371,17 @@ class NetApp7modeClientTestCase(test.TestCase):
         self.assertEqual(path, lun_info_args[0].get_content())
         self.assertEqual('enable', lun_info_args[1].get_name())
         self.assertEqual('true', lun_info_args[1].get_content())
+
+    def test_get_actual_path_for_export(self):
+        fake_export_path = 'fake_export_path'
+        expected_actual_pathname = 'fake_actual_pathname'
+        response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                           <actual-pathname>%(path)s</actual-pathname>
+                          </results>""" % {'path': expected_actual_pathname}))
+        self.connection.invoke_successfully.return_value = response
+
+        actual_pathname = self.client.get_actual_path_for_export(
+            fake_export_path)
+
+        self.assertEqual(expected_actual_pathname, actual_pathname)

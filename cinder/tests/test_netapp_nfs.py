@@ -1138,7 +1138,6 @@ class NetappDirect7modeNfsDriverTestCase(NetappDirectCmodeNfsDriverTestCase):
 
         drv._get_export_ip_path(
             IgnoreArg(), IgnoreArg()).AndReturn(('127.0.0.1', '/nfs'))
-        drv._get_actual_path_for_export(IgnoreArg()).AndReturn('/vol/vol1/nfs')
         drv._start_clone(IgnoreArg(), IgnoreArg()).AndReturn(('1', '2'))
         if status == 'fail':
             drv._wait_for_clone_finish('1', '2').AndRaise(
@@ -1151,6 +1150,9 @@ class NetappDirect7modeNfsDriverTestCase(NetappDirectCmodeNfsDriverTestCase):
     def test_clone_volume_clear(self):
         drv = self._driver
         mox = self._prepare_clone_mock('fail')
+        drv.zapi_client = mox.CreateMockAnything()
+        drv.zapi_client.get_actual_path_for_export('/nfs').AndReturn(
+            '/vol/vol1/nfs')
 
         mox.ReplayAll()
 
@@ -1164,5 +1166,23 @@ class NetappDirect7modeNfsDriverTestCase(NetappDirectCmodeNfsDriverTestCase):
                 pass
             else:
                 raise
+
+        mox.VerifyAll()
+
+    def test_clone_volume(self):
+        drv = self._driver
+        mox = self._prepare_clone_mock('pass')
+        drv.zapi_client = mox.CreateMockAnything()
+        drv.zapi_client.get_actual_path_for_export('/nfs').AndReturn(
+            '/vol/vol1/nfs')
+
+        mox.ReplayAll()
+
+        volume_name = 'volume_name'
+        clone_name = 'clone_name'
+        volume_id = volume_name + str(hash(volume_name))
+        share = 'ip:/share'
+
+        drv._clone_volume(volume_name, clone_name, volume_id, share)
 
         mox.VerifyAll()

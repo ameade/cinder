@@ -1234,7 +1234,7 @@ class NetAppDirect7modeNfsDriver(NetAppDirectNfsDriver):
                       volume_id, share=None):
         """Clones mounted volume with NetApp filer."""
         (host_ip, export_path) = self._get_export_ip_path(volume_id, share)
-        storage_path = self._get_actual_path_for_export(export_path)
+        storage_path = self.zapi_client.get_actual_path_for_export(export_path)
         target_path = '%s/%s' % (storage_path, clone_name)
         (clone_id, vol_uuid) = self._start_clone('%s/%s' % (storage_path,
                                                             volume_name),
@@ -1341,7 +1341,7 @@ class NetAppDirect7modeNfsDriver(NetAppDirectNfsDriver):
     def _shortlist_del_eligible_files(self, share, old_files):
         """Prepares list of eligible files to be deleted from cache."""
         file_list = []
-        exp_volume = self._get_actual_path_for_export(share)
+        exp_volume = self.zapi_client.get_actual_path_for_export(share)
         for file in old_files:
             path = '/vol/%s/%s' % (exp_volume, file)
             u_bytes = self._get_filer_file_usage(path)

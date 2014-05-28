@@ -14,10 +14,11 @@
 #    under the License.
 
 
+import copy
 import math
 import time
 
-
+from cinder import exception
 from cinder.openstack.common import log as logging
 from cinder.volume.drivers.netapp import api as netapp_api
 from cinder.volume.drivers.netapp.client import base
@@ -31,6 +32,12 @@ class Client(base.Client):
     def __init__(self, connection, volume_list=None):
         super(Client, self).__init__(connection)
         self.volume_list = volume_list
+
+    def _invoke_vfiler_api(self, na_element, vfiler):
+        server = copy.copy(self.connection)
+        server.set_vfiler(vfiler)
+        result = server.invoke_successfully(na_element, True)
+        return result
 
     def get_target_details(self):
         """Gets the target portal details."""
@@ -228,3 +235,13 @@ class Client(base.Client):
             'lun-set-space-reservation-info',
             **{'path': path, 'enable': enable})
         self.connection.invoke_successfully(space_res, True)
+
+    def get_actual_path_for_export(self, export_path):
+        """Gets the actual path on the filer for export path."""
+        storage_path = netapp_api.NaElement.create_node_with_children(
+            'nfs-exportfs-storage-path', **{'pathname': export_path})
+        result = self.connection.invoke_successfully(storage_path)
+        if result.get_child_content('actual-pathname'):
+            return result.get_child_content('actual-pathname')
+        raise exception.NotFound(_('No storage path found for export path %s')
+                                 % (export_path))
