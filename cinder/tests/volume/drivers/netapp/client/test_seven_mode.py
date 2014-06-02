@@ -385,3 +385,126 @@ class NetApp7modeClientTestCase(test.TestCase):
             fake_export_path)
 
         self.assertEqual(expected_actual_pathname, actual_pathname)
+
+    def test_clone_file(self):
+        expected_src_path = "fake_src_path"
+        expected_dest_path = "fake_dest_path"
+        fake_volume_id = '0309c748-0d94-41f0-af46-4fbbd76686cf'
+        fake_clone_op_id = 'c22ad299-ecec-4ec0-8de4-352b887bfce2'
+        fake_clone_id_response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                           <clone-id>
+                             <clone-id-info>
+                               <volume-uuid>%(volume)s</volume-uuid>
+                               <clone-op-id>%(clone_id)s</clone-op-id>
+                             </clone-id-info>
+                           </clone-id>
+                         </results>""" % {'volume': fake_volume_id,
+                                          'clone_id': fake_clone_op_id}))
+        fake_clone_list_response = netapp_api.NaElement(
+            etree.XML("""<results>
+                           <clone-list-status>
+                             <clone-id-info>
+                               <volume-uuid>%(volume)s</volume-uuid>
+                               <clone-op-id>%(clone_id)s</clone-op-id>
+                             </clone-id-info>
+                               <clone-op-id>%(clone_id)s</clone-op-id>
+                           </clone-list-status>
+                           <status>
+                             <ops-info>
+                               <clone-state>completed</clone-state>
+                             </ops-info>
+                           </status>
+                         </results>""" % {'volume': fake_volume_id,
+                                          'clone_id': fake_clone_op_id}))
+        self.connection.invoke_successfully.side_effect = [
+            fake_clone_id_response, fake_clone_list_response]
+
+        self.client.clone_file(expected_src_path, expected_dest_path)
+
+        __, _args, __ = self.connection.invoke_successfully.mock_calls[0]
+        actual_request = _args[0]
+        actual_src_path = actual_request \
+            .get_child_by_name('source-path').get_content()
+        actual_dest_path = actual_request.get_child_by_name(
+            'destination-path').get_content()
+
+        self.assertEqual(expected_src_path, actual_src_path)
+        self.assertEqual(expected_dest_path, actual_dest_path)
+        self.assertEqual(actual_request.get_child_by_name(
+            'destination-exists'), None)
+
+    def test_clone_file_when_clone_fails(self):
+        """Ensure clone is cleaned up on failure."""
+        expected_src_path = "fake_src_path"
+        expected_dest_path = "fake_dest_path"
+        fake_volume_id = '0309c748-0d94-41f0-af46-4fbbd76686cf'
+        fake_clone_op_id = 'c22ad299-ecec-4ec0-8de4-352b887bfce2'
+        fake_clone_id_response = netapp_api.NaElement(
+            etree.XML("""<results status="passed">
+                           <clone-id>
+                             <clone-id-info>
+                               <volume-uuid>%(volume)s</volume-uuid>
+                               <clone-op-id>%(clone_id)s</clone-op-id>
+                             </clone-id-info>
+                           </clone-id>
+                         </results>""" % {'volume': fake_volume_id,
+                                          'clone_id': fake_clone_op_id}))
+        fake_clone_list_response = netapp_api.NaElement(
+            etree.XML("""<results>
+                           <clone-list-status>
+                             <clone-id-info>
+                               <volume-uuid>%(volume)s</volume-uuid>
+                               <clone-op-id>%(clone_id)s</clone-op-id>
+                             </clone-id-info>
+                               <clone-op-id>%(clone_id)s</clone-op-id>
+                           </clone-list-status>
+                           <status>
+                             <ops-info>
+                               <clone-state>failed</clone-state>
+                             </ops-info>
+                           </status>
+                         </results>""" % {'volume': fake_volume_id,
+                                          'clone_id': fake_clone_op_id}))
+        fake_clone_clear_response = mock.Mock()
+        self.connection.invoke_successfully.side_effect = [
+            fake_clone_id_response, fake_clone_list_response,
+            fake_clone_clear_response]
+
+        self.assertRaises(netapp_api.NaApiError,
+                          self.client.clone_file,
+                          expected_src_path,
+                          expected_dest_path)
+
+        __, _args, __ = self.connection.invoke_successfully.mock_calls[0]
+        actual_request = _args[0]
+        actual_src_path = actual_request \
+            .get_child_by_name('source-path').get_content()
+        actual_dest_path = actual_request.get_child_by_name(
+            'destination-path').get_content()
+
+        self.assertEqual(expected_src_path, actual_src_path)
+        self.assertEqual(expected_dest_path, actual_dest_path)
+        self.assertEqual(actual_request.get_child_by_name(
+            'destination-exists'), None)
+
+        __, _args, __ = self.connection.invoke_successfully.mock_calls[1]
+        actual_request = _args[0]
+        actual_clone_id = actual_request.get_child_by_name('clone-id')
+        actual_clone_id_info = actual_clone_id.get_child_by_name(
+            'clone-id-info')
+        actual_clone_op_id = actual_clone_id_info.get_child_by_name(
+            'clone-op-id').get_content()
+        actual_volume_uuid = actual_clone_id_info.get_child_by_name(
+            'volume-uuid').get_content()
+
+        self.assertEqual(fake_clone_op_id, actual_clone_op_id)
+        self.assertEqual(fake_volume_id, actual_volume_uuid)
+
+        # Ensure that the clone-clear call is made upon error
+        __, _args, __ = self.connection.invoke_successfully.mock_calls[2]
+        actual_request = _args[0]
+        actual_clone_id = actual_request \
+            .get_child_by_name('clone-id').get_content()
+
+        self.assertEqual(fake_clone_op_id, actual_clone_id)

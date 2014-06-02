@@ -245,3 +245,74 @@ class Client(base.Client):
             return result.get_child_content('actual-pathname')
         raise exception.NotFound(_('No storage path found for export path %s')
                                  % (export_path))
+
+    def clone_file(self, src_path, dest_path):
+        msg_fmt = {'src_path': src_path, 'dest_path': dest_path}
+        LOG.debug(_("""Cloning with src %(src_path)s, dest %(dest_path)s""")
+                  % msg_fmt)
+        clone_start = netapp_api.NaElement.create_node_with_children(
+            'clone-start',
+            **{'source-path': src_path,
+               'destination-path': dest_path,
+               'no-snap': 'true'})
+        result = self.connection.invoke_successfully(clone_start)
+        clone_id_el = result.get_child_by_name('clone-id')
+        cl_id_info = clone_id_el.get_child_by_name('clone-id-info')
+        vol_uuid = cl_id_info.get_child_content('volume-uuid')
+        clone_id = cl_id_info.get_child_content('clone-op-id')
+
+        if vol_uuid:
+            try:
+                self._wait_for_clone_finish(clone_id, vol_uuid)
+            except netapp_api.NaApiError as e:
+                if e.code != 'UnknownCloneId':
+                    self._clear_clone(clone_id)
+                raise e
+
+    def _wait_for_clone_finish(self, clone_op_id, vol_uuid):
+        """Waits till a clone operation is complete or errored out."""
+        clone_ls_st = netapp_api.NaElement('clone-list-status')
+        clone_id = netapp_api.NaElement('clone-id')
+        clone_ls_st.add_child_elem(clone_id)
+        clone_id.add_node_with_children('clone-id-info',
+                                        **{'clone-op-id': clone_op_id,
+                                           'volume-uuid': vol_uuid})
+        task_running = True
+        while task_running:
+            result = self.connection.invoke_successfully(clone_ls_st)
+            status = result.get_child_by_name('status')
+            ops_info = status.get_children()
+            if ops_info:
+                state = ops_info[0].get_child_content('clone-state')
+                if state == 'completed':
+                    task_running = False
+                elif state == 'failed':
+                    code = ops_info[0].get_child_content('error')
+                    reason = ops_info[0].get_child_content('reason')
+                    raise netapp_api.NaApiError(code, reason)
+                else:
+                    time.sleep(1)
+            else:
+                raise netapp_api.NaApiError(
+                    'UnknownCloneId',
+                    'No clone operation for clone id %s found on the filer'
+                    % (clone_id))
+
+    def _clear_clone(self, clone_id):
+        """Clear the clone information.
+
+        Invoke this in case of failed clone.
+        """
+
+        clone_clear = netapp_api.NaElement.create_node_with_children(
+            'clone-clear',
+            **{'clone-id': clone_id})
+        retry = 3
+        while retry:
+            try:
+                self.connection.invoke_successfully(clone_clear)
+                break
+            except Exception:
+                # Filer might be rebooting
+                time.sleep(5)
+            retry = retry - 1

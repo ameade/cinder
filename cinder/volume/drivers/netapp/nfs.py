@@ -32,7 +32,6 @@ from cinder.openstack.common import log as logging
 from cinder.openstack.common import processutils
 from cinder import units
 from cinder import utils
-from cinder.volume.drivers.netapp.api import NaApiError
 from cinder.volume.drivers.netapp.api import NaElement
 from cinder.volume.drivers.netapp.api import NaServer
 from cinder.volume.drivers.netapp.client import cmode
@@ -1236,85 +1235,8 @@ class NetAppDirect7modeNfsDriver(NetAppDirectNfsDriver):
         (host_ip, export_path) = self._get_export_ip_path(volume_id, share)
         storage_path = self.zapi_client.get_actual_path_for_export(export_path)
         target_path = '%s/%s' % (storage_path, clone_name)
-        (clone_id, vol_uuid) = self._start_clone('%s/%s' % (storage_path,
-                                                            volume_name),
-                                                 target_path)
-        if vol_uuid:
-            try:
-                self._wait_for_clone_finish(clone_id, vol_uuid)
-            except NaApiError as e:
-                if e.code != 'UnknownCloneId':
-                    self._clear_clone(clone_id)
-                raise e
-
-    def _start_clone(self, src_path, dest_path):
-        """Starts the clone operation.
-
-        :returns: clone-id
-        """
-
-        msg_fmt = {'src_path': src_path, 'dest_path': dest_path}
-        LOG.debug(_("""Cloning with src %(src_path)s, dest %(dest_path)s""")
-                  % msg_fmt)
-        clone_start = NaElement.create_node_with_children(
-            'clone-start',
-            **{'source-path': src_path,
-               'destination-path': dest_path,
-               'no-snap': 'true'})
-        result = self._invoke_successfully(clone_start, None)
-        clone_id_el = result.get_child_by_name('clone-id')
-        cl_id_info = clone_id_el.get_child_by_name('clone-id-info')
-        vol_uuid = cl_id_info.get_child_content('volume-uuid')
-        clone_id = cl_id_info.get_child_content('clone-op-id')
-        return (clone_id, vol_uuid)
-
-    def _wait_for_clone_finish(self, clone_op_id, vol_uuid):
-        """Waits till a clone operation is complete or errored out."""
-        clone_ls_st = NaElement('clone-list-status')
-        clone_id = NaElement('clone-id')
-        clone_ls_st.add_child_elem(clone_id)
-        clone_id.add_node_with_children('clone-id-info',
-                                        **{'clone-op-id': clone_op_id,
-                                           'volume-uuid': vol_uuid})
-        task_running = True
-        while task_running:
-            result = self._invoke_successfully(clone_ls_st, None)
-            status = result.get_child_by_name('status')
-            ops_info = status.get_children()
-            if ops_info:
-                state = ops_info[0].get_child_content('clone-state')
-                if state == 'completed':
-                    task_running = False
-                elif state == 'failed':
-                    code = ops_info[0].get_child_content('error')
-                    reason = ops_info[0].get_child_content('reason')
-                    raise NaApiError(code, reason)
-                else:
-                    time.sleep(1)
-            else:
-                raise NaApiError(
-                    'UnknownCloneId',
-                    'No clone operation for clone id %s found on the filer'
-                    % (clone_id))
-
-    def _clear_clone(self, clone_id):
-        """Clear the clone information.
-
-        Invoke this in case of failed clone.
-        """
-
-        clone_clear = NaElement.create_node_with_children(
-            'clone-clear',
-            **{'clone-id': clone_id})
-        retry = 3
-        while retry:
-            try:
-                self._invoke_successfully(clone_clear, None)
-                break
-            except Exception:
-                # Filer might be rebooting
-                time.sleep(5)
-            retry = retry - 1
+        self.zapi_client.clone_file('%s/%s' % (storage_path, volume_name),
+                                    target_path)
 
     def _update_volume_stats(self):
         """Retrieve stats info from volume group."""
